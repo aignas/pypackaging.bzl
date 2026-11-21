@@ -1,0 +1,58 @@
+"""The generator of the conformance test cases, see the README.md."""
+
+load("@rules_python//python:py_binary.bzl", "py_binary")
+load("@rules_python//python:py_test.bzl", "py_test")
+
+_CASES = "@pypackaging.bzl//pypackaging/tests/packaging_cases"
+
+_ARGS = [
+    "--test-version=$(rlocationpath @pypa_packaging//:tests/test_version.py)",
+    "--test-specifiers=$(rlocationpath @pypa_packaging//:tests/test_specifiers.py)",
+    "--test-markers=$(rlocationpath @pypa_packaging//:tests/test_markers.py)",
+]
+
+_DATA = [
+    "@pypa_packaging//:tests/test_markers.py",
+    "@pypa_packaging//:tests/test_specifiers.py",
+    "@pypa_packaging//:tests/test_version.py",
+]
+
+_DEPS = [
+    "@pypa_packaging//:packaging",
+    "@rules_python//python/runfiles",
+]
+
+# Regenerate the conformance test cases from the `packaging` test-suite:
+#
+#     bazel run //:update
+py_binary(
+    name = "update",
+    srcs = ["generate.py"],
+    args = _ARGS + [
+        # Relative to this directory.
+        "--marker-cases=../pypackaging/tests/packaging_cases/marker_cases.bzl",
+        "--tags-cases=../pypackaging/tests/packaging_cases/tags_cases.bzl",
+        "--version-cases=../pypackaging/tests/packaging_cases/version_cases.bzl",
+    ],
+    data = _DATA,
+    main = "generate.py",
+    deps = _DEPS,
+)
+
+py_test(
+    name = "up_to_date_test",
+    srcs = ["generate.py"],
+    args = _ARGS + [
+        "--check",
+        "--marker-cases=$(rlocationpath {}:marker_cases.bzl)".format(_CASES),
+        "--tags-cases=$(rlocationpath {}:tags_cases.bzl)".format(_CASES),
+        "--version-cases=$(rlocationpath {}:version_cases.bzl)".format(_CASES),
+    ],
+    data = _DATA + [
+        _CASES + ":marker_cases.bzl",
+        _CASES + ":tags_cases.bzl",
+        _CASES + ":version_cases.bzl",
+    ],
+    main = "generate.py",
+    deps = _DEPS,
+)
