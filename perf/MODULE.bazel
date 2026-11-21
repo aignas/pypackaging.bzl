@@ -1,0 +1,10 @@
+"""Bazel module for the performance measurements."""
+
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "pypackaging.bzl", version = "0.0.0")
+bazel_dep(name = "rules_python", version = "2.5.1")
+
+local_path_override(
+    module_name = "pypackaging.bzl",
+    path = "..",
+)
