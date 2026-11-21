@@ -1,0 +1,32 @@
+"""Bazel workspace for the pypackaging.bzl WORKSPACE smoke test.
+
+Keep the `http_archive` calls in sync with the README.md.
+"""
+
+workspace(name = "pypackaging_workspace_test")
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "6e78f0e57de26801f6f564fa7c4a48dc8b36873e416257a92bbb0937eeac8446",
+    url = "https://github.com/bazelbuild/bazel-skylib/releases/download/1.8.2/bazel-skylib-1.8.2.tar.gz",
+)
+
+http_archive(
+    name = "package_metadata",
+    sha256 = "8f27dc7393e3f3bdc793bdc4ba36d67a63c22cc9d38cc65d3204654974ea4563",
+    strip_prefix = "supply-chain-0.0.7/metadata",
+    url = "https://github.com/bazel-contrib/supply-chain/releases/download/v0.0.7/supply-chain-v0.0.7.tar.gz",
+)
+
+local_repository(
+    name = "pypackaging.bzl",
+    path = "../..",
+)
+
+# The checks of the Bzlmod smoke test are reused.
+local_repository(
+    name = "pypackaging_smoke_test",
+    path = "../smoke",
+)
