@@ -13,6 +13,11 @@ While the version is 0.x, breaking changes are released as minor versions.
 - WORKSPACE is supported again with Bazel 7 and 8: define the repository with
   the name `pypackaging.bzl`, see the README. `e2e/workspace` tests it.
 
+### Changed
+
+- `markers.evaluate` is faster: a version comparison that is repeated in a
+  marker is parsed once and the common variables are parsed with fewer steps.
+
 ## [0.3.0] - 2026-10-16
 
 Aligns version, specifier, marker, requirement, tag, and filename handling with

@@ -5,7 +5,7 @@ packaging/_tokenizer.py (Apache 2.0 / BSD).
 Baseline: pypa/packaging 26.3 (plus #1438 set-of-extras evaluation)
 """
 
-load("//pypackaging/private/specifiers:specifiers.bzl", "specifier_contains", "try_parse_specifier")
+load("//pypackaging/private/specifiers:specifiers.bzl", "specifier_contains", "specifier_matches_parsed", "try_parse_specifier")
 load("//pypackaging/private/utils:utils.bzl", "utils")
 load("//pypackaging/private/version:version.bzl", "strip_whitespace", "try_parse_version")
 
@@ -22,8 +22,7 @@ _WS = " \t"
 # letters and digits that can legitimately appear next to a token.
 _ASCII_WORD_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
 
-# Pre-allocated variable nodes, keyed by first character (longest first within
-# each bucket so prefixes never shadow longer names).
+# Pre-allocated variable nodes.
 _VAR_NODES = {
     name: struct(type = "variable", value = name)
     for name in (
@@ -44,32 +43,35 @@ _VAR_NODES = {
     )
 }
 
+# The spellings of the variables, keyed by the first character. A match must
+# end at a word boundary, so a name cannot shadow a longer one and the
+# candidates are ordered by how common they are in the wild.
 _VARS_BY_CHAR = {
     "d": (("dependency_groups", _VAR_NODES["dependency_groups"]),),
     "e": (
-        ("extras", _VAR_NODES["extras"]),
         ("extra", _VAR_NODES["extra"]),
+        ("extras", _VAR_NODES["extras"]),
     ),
     "i": (
-        ("implementation_version", _VAR_NODES["implementation_version"]),
         ("implementation_name", _VAR_NODES["implementation_name"]),
+        ("implementation_version", _VAR_NODES["implementation_version"]),
     ),
     "o": (
         ("os_name", _VAR_NODES["os_name"]),
         ("os.name", _VAR_NODES["os_name"]),
     ),
     "p": (
+        ("python_version", _VAR_NODES["python_version"]),
+        ("python_full_version", _VAR_NODES["python_full_version"]),
+        ("platform_machine", _VAR_NODES["platform_machine"]),
+        ("platform_system", _VAR_NODES["platform_system"]),
         ("platform_python_implementation", _VAR_NODES["platform_python_implementation"]),
+        ("platform_release", _VAR_NODES["platform_release"]),
+        ("platform_version", _VAR_NODES["platform_version"]),
+        ("platform.machine", _VAR_NODES["platform_machine"]),
+        ("platform.version", _VAR_NODES["platform_version"]),
         ("platform.python_implementation", _VAR_NODES["platform_python_implementation"]),
         ("python_implementation", _VAR_NODES["platform_python_implementation"]),
-        ("python_full_version", _VAR_NODES["python_full_version"]),
-        ("platform_release", _VAR_NODES["platform_release"]),
-        ("platform_machine", _VAR_NODES["platform_machine"]),
-        ("platform.machine", _VAR_NODES["platform_machine"]),
-        ("platform_version", _VAR_NODES["platform_version"]),
-        ("platform.version", _VAR_NODES["platform_version"]),
-        ("platform_system", _VAR_NODES["platform_system"]),
-        ("python_version", _VAR_NODES["python_version"]),
     ),
     "s": (
         ("sys_platform", _VAR_NODES["sys_platform"]),
@@ -598,16 +600,6 @@ def _resolve_extra(environment, cache):
     cache["extra"] = val
     return val
 
-def _env_lookup(environment, key, item, cache):
-    if key == "extra":
-        return _resolve_extra(environment, cache)
-    value = environment.get(key)
-    if value == None:
-        fail("Undefined environment variable '{}' in marker `{}`".format(key, _format_item(item)))
-    if key == "python_full_version" and type(value) == "string" and value.endswith("+"):
-        return value + "local"
-    return value
-
 def _canonicalize_collection(value, key, item):
     out = []
     for v in value:
@@ -623,21 +615,29 @@ def _canonicalize_collection(value, key, item):
 def _eval_item(item, environment, cache, ver_cache):
     lhs, op, rhs = item
 
-    if lhs.type == "variable":
-        key = lhs.value
-        lhs_val = _env_lookup(environment, key, item, cache)
-        rhs_val = rhs.value
-        env_val = lhs_val
+    # The environment value is a string almost always, so the code below gets
+    # its type only once.
+    lhs_is_var = lhs.type == "variable"
+    key = lhs.value if lhs_is_var else rhs.value
+    if key == "extra":
+        env_val = _resolve_extra(environment, cache)
     else:
-        key = rhs.value
-        lhs_val = lhs.value
-        rhs_val = _env_lookup(environment, key, item, cache)
-        env_val = rhs_val
+        env_val = environment.get(key)
+        if env_val == None:
+            fail("Undefined environment variable '{}' in marker `{}`".format(key, _format_item(item)))
+    env_type = type(env_val)
 
-    # Upstream packaging (#1438): `extra` may be a set/list/tuple of active
-    # extras (converted to a dict set by `_resolve_extra`).
-    if key == "extra" and type(env_val) == "dict":
-        value = rhs_val if lhs.type == "variable" else lhs_val
+    if env_type == "string":
+        if lhs_is_var:
+            lhs_val = env_val
+            rhs_val = rhs.value
+        else:
+            lhs_val = lhs.value
+            rhs_val = env_val
+    elif key == "extra" and env_type == "dict":
+        # Upstream packaging (#1438): `extra` may be a set/list/tuple of
+        # active extras (converted to a dict set by `_resolve_extra`).
+        value = rhs.value if lhs_is_var else lhs.value
         if op == "==":
             return value in env_val
         if op == "!=":
@@ -646,55 +646,74 @@ def _eval_item(item, environment, cache, ver_cache):
             op,
             _format_item(item),
         ))
-
-    if type(lhs_val) != "string":
+    elif lhs_is_var:
         fail("Cannot evaluate marker `{}`: the left-hand side must be a string, but '{}' is a {}".format(
             _format_item(item),
             key,
-            type(lhs_val),
+            env_type,
         ))
-    if type(rhs_val) != "string" and type(rhs_val) not in _COLLECTION_TYPES:
+    elif env_type not in _COLLECTION_TYPES:
         fail("Marker environment value for '{}' must be a string or a collection of strings, got {} (in marker `{}`)".format(
             key,
-            type(rhs_val),
+            env_type,
             _format_item(item),
         ))
+    else:
+        lhs_val = lhs.value
+        rhs_val = env_val
 
     if key in _MARKERS_ALLOWING_SET:
         lhs_val = utils.canonicalize_name(lhs_val)
-        if type(rhs_val) == "string":
+        if env_type == "string":
             rhs_val = utils.canonicalize_name(rhs_val)
         else:
             rhs_val = _canonicalize_collection(rhs_val, key, item)
-
-    # Upstream `_eval_op`: version comparison when `op + rhs` is a valid
-    # specifier; otherwise fall through to the string operator table.
-    if key in _MARKERS_REQUIRING_VERSION and type(rhs_val) == "string" and op != "in" and op != "not in":
-        spec = try_parse_specifier(op + rhs_val)
-        if spec != None:
-            # Like upstream `spec.contains(lhs, prereleases=True)`: an invalid
-            # version is False (only `===` compares it as a string).
-            if spec.operator == "===":
-                return specifier_contains(spec, lhs_val)
-            if lhs_val in ver_cache:
-                pv = ver_cache[lhs_val]
+    elif env_type == "string" and key in _MARKERS_REQUIRING_VERSION:
+        if key == "python_full_version" and env_val.endswith("+"):
+            env_val += "local"
+            if lhs_is_var:
+                lhs_val = env_val
             else:
-                pv = try_parse_version(lhs_val)
-                ver_cache[lhs_val] = pv
-            if pv == None:
-                return False
-            return specifier_contains(spec, pv)
+                rhs_val = env_val
 
+        # Upstream `_eval_op`: version comparison when `op + rhs` is a valid
+        # specifier; otherwise fall through to the string operator table.
+        if op != "in" and op != "not in":
+            # The same comparison is often repeated in a marker and the same
+            # version is compared in all of them, so both are parsed once.
+            spec_str = op + rhs_val
+            if spec_str in cache:
+                spec = cache[spec_str]
+            else:
+                spec = try_parse_specifier(spec_str)
+                cache[spec_str] = spec
+            if spec != None:
+                # Like upstream `spec.contains(lhs, prereleases=True)`: an
+                # invalid version is False (only `===` compares it as a
+                # string).
+                if spec.operator == "===":
+                    return specifier_contains(spec, lhs_val)
+                if lhs_val in ver_cache:
+                    pv = ver_cache[lhs_val]
+                else:
+                    pv = try_parse_version(lhs_val)
+                    ver_cache[lhs_val] = pv
+                if pv == None:
+                    return False
+                return specifier_matches_parsed(spec, pv)
+
+    if op == "==":
+        return lhs_val == rhs_val
+    if op == "!=":
+        return lhs_val != rhs_val
     if op == "in":
         return lhs_val in rhs_val
     if op == "not in":
         return lhs_val not in rhs_val
     if op == "<" or op == ">":
         return False
-    if op == "==" or op == "<=" or op == ">=":
+    if op == "<=" or op == ">=":
         return lhs_val == rhs_val
-    if op == "!=":
-        return lhs_val != rhs_val
     fail("Undefined comparison: operator '{}' is not defined for {} and {} (in marker `{}`)".format(
         op,
         repr(lhs_val),
