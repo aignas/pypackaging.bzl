@@ -681,6 +681,8 @@ def _eval_item(item, environment, cache, ver_cache):
         if op != "in" and op != "not in":
             # The same comparison is often repeated in a marker and the same
             # version is compared in all of them, so both are parsed once.
+            # Safe to share `cache` with `"extra"`: `op` always starts with an
+            # operator symbol (`=`, `!`, `<`, `>`, `~`), never `"e"`.
             spec_str = op + rhs_val
             if spec_str in cache:
                 spec = cache[spec_str]
