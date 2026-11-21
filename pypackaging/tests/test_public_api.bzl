@@ -5,7 +5,7 @@ load(":test_helpers.bzl", "unit_test_suite")
 
 # The complete public API of v0.3.0.
 _PUBLIC_API = {
-    "markers": ["evaluate", "parse", "to_string"],
+    "markers": ["evaluate", "evaluate_partial", "parse", "to_string"],
     "requirements": ["parse", "to_string"],
     "specifiers": [
         "contains",
