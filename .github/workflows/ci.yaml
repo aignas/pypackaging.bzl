@@ -78,7 +78,13 @@ jobs:
       - name: Run WORKSPACE E2E Tests
         # Bazel 9 removed WORKSPACE.
         if: matrix.bazel != '9.x'
-        run: bazel test //...
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            # Unlike with Bzlmod, the shell that is needed to run the tests is
+            # not detected on Windows.
+            export BAZEL_SH="$(cygpath --windows "$(command -v bash)")"
+          fi
+          bazel test //...
         working-directory: e2e/workspace
   pre-commit:
     runs-on: ubuntu-latest
