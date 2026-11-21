@@ -54,3 +54,5 @@ repos:
     rev: v1.35.3
     hooks:
       - id: typos
+        # Generated from the test-suite of `packaging`.
+        exclude: ^pypackaging/tests/packaging_cases/

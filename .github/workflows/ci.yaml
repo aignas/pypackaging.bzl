@@ -21,9 +21,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # "pinned" uses the version in .bazelversion (also pinned in docs/,
-        # e2e/smoke/, e2e/workspace/ and perf/). The other legs override it
-        # with USE_BAZEL_VERSION.
+        # "pinned" uses the version in .bazelversion (also pinned in
+        # conformance/, docs/, e2e/smoke/, e2e/workspace/ and perf/). The
+        # other legs override it with USE_BAZEL_VERSION.
         # 7.1.0 is the oldest supported version (bazel_compatibility).
         os: [ubuntu-latest]
         bazel: [pinned, 7.1.0, 7.x, 9.x]
@@ -73,6 +73,12 @@ jobs:
         if: runner.os == 'Linux'
         run: bazel test $LOCKFILE_FLAGS //...
         working-directory: docs
+      - name: Run Conformance Tests
+        # Checks that the generated test cases are up to date, they are used
+        # by the tests of all of the Bazel versions.
+        if: runner.os == 'Linux' && matrix.bazel == 'pinned'
+        run: bazel test $LOCKFILE_FLAGS //...
+        working-directory: conformance
       - name: Run Perf Tests
         # The number of the steps does not depend on the Bazel version.
         if: runner.os == 'Linux' && matrix.bazel == 'pinned'
