@@ -1,5 +1,6 @@
 # In code review, collapse generated files
 docs/*.md linguist-generated=true
+pypackaging/tests/packaging_cases/*.bzl linguist-generated=true
 
 #################################
 # Configuration for 'git archive'
@@ -16,6 +17,7 @@ docs/*.md linguist-generated=true
 .github export-ignore
 .pre-commit-config.yaml export-ignore
 .prettierignore export-ignore
+conformance export-ignore
 doc_extract export-ignore
 docs export-ignore
 perf export-ignore

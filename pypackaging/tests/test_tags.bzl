@@ -15,7 +15,6 @@ load(
     "select_compatible",
     "tag_str",
 )
-load(":get_supported_fixtures.bzl", "GET_SUPPORTED_FIXTURES")
 load(":test_helpers.bzl", "expect_failure_test", "unit_test_suite")
 
 def _parse_tag_subject_impl(ctx):
@@ -416,15 +415,6 @@ def _test_get_supported_no_platforms_impl(env, _target):
             get_supported(version = "311", platforms = platforms, impl = "cp", abis = ["cp311"]),
         ).contains_exactly(expected).in_order()
 
-def _test_get_supported_fixtures_impl(env, _target):
-    # Expected values come from packaging 26.3 with pip 25.2's get_supported
-    # wrapper (and packaging's own linux expansion for manylinux/musllinux).
-    for f in GET_SUPPORTED_FIXTURES:
-        supported = get_supported(version = f.version, platforms = f.platforms, impl = f.impl, abis = f.abis)
-        env.expect.where(case = f.name).that_int(len(supported)).equals(f.count)
-        env.expect.where(case = f.name).that_collection(supported[:len(f.head)]).contains_exactly(f.head).in_order()
-        env.expect.where(case = f.name).that_int(hash(" ".join(supported))).equals(f.hash)
-
 def tags_test_suite(name):
     """Sets up the tags tests.
 
@@ -477,7 +467,6 @@ def tags_test_suite(name):
             "test_select_compatible": _test_select_compatible_impl,
             "test_get_python_version": _test_get_python_version_impl,
             "test_get_supported_no_platforms": _test_get_supported_no_platforms_impl,
-            "test_get_supported_fixtures": _test_get_supported_fixtures_impl,
         },
         extra_tests = failure_tests,
     )
