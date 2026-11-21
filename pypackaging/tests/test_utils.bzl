@@ -1,11 +1,10 @@
 """Tests for utils.bzl."""
 
-load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
-load("@rules_testing//lib:truth.bzl", "matching")
 load("@rules_testing//lib:util.bzl", "util")
 
 # buildifier: disable=bzl-visibility
 load("//pypackaging/private/utils:utils.bzl", "utils")
+load(":test_helpers.bzl", "expect_failure_test", "unit_test_suite")
 
 def _failing_subject_impl(ctx):
     arg = ctx.attr.arg
@@ -28,9 +27,6 @@ _failing_subject = rule(
     },
 )
 
-def _failure_test_impl(env, target):
-    env.expect.that_target(target).failures().contains_predicate(matching.contains(env.ctx.attr.expected_failure))
-
 def _failure_tests(name, fn, cases, validate_order = False):
     """Creates one expect_failure test per (arg, expected message) case."""
     names = []
@@ -39,13 +35,7 @@ def _failure_tests(name, fn, cases, validate_order = False):
     for i, (arg, expected) in enumerate(cases):
         test_name = "{}_{}".format(name, i)
         util.helper_target(_failing_subject, name = test_name + "_subject", fn = fn, arg = arg, validate_order = validate_order)
-        analysis_test(
-            name = test_name,
-            target = test_name + "_subject",
-            expect_failure = True,
-            impl = _failure_test_impl,
-            attrs = {"expected_failure": attr.string(default = expected)},
-        )
+        expect_failure_test(test_name, test_name + "_subject", expected)
         names.append(test_name)
     return names
 
@@ -73,21 +63,12 @@ def _test_canonicalize_name_impl(env, _target):
     # Starlark's lower() is ASCII-only: non-ASCII letters are kept as-is.
     env.expect.that_str(utils.canonicalize_name("Café_Bar")).equals("café-bar")
 
-def _test_canonicalize_name(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_canonicalize_name_impl)
-
 def _test_is_normalized_name_impl(env, _target):
     for name in ["foo", "foo-bar", "a", "1", "a1-b2", "requests"]:
         env.expect.where(name = name).that_bool(utils.is_normalized_name(name)).equals(True)
 
-    # "foo--bar" is accepted by packaging 26.2's regex (a documented divergence).
     for name in ["", "Django", "foo--bar", "-foo", "foo-", "foo_bar", "foo.bar", "ab-", "foo bar", "café"]:
         env.expect.where(name = name).that_bool(utils.is_normalized_name(name)).equals(False)
-
-def _test_is_normalized_name(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_is_normalized_name_impl)
 
 def _test_canonicalize_version_impl(env, _target):
     env.expect.that_str(utils.canonicalize_version("1.0.0")).equals("1")
@@ -124,10 +105,6 @@ def _test_canonicalize_version_impl(env, _target):
         env.expect.where(version = version_str).that_str(utils.canonicalize_version(version_str)).equals(stripped)
         env.expect.where(version = version_str).that_str(utils.canonicalize_version(version_str, strip_trailing_zero = False)).equals(unstripped)
 
-def _test_canonicalize_version(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_canonicalize_version_impl)
-
 def _test_parse_wheel_filename_impl(env, _target):
     res = utils.parse_wheel_filename("foo-1.0-py3-none-any.whl")
     env.expect.that_str(res.name).equals("foo")
@@ -139,10 +116,6 @@ def _test_parse_wheel_filename_impl(env, _target):
     env.expect.that_str(tag.interpreter).equals("py3")
     env.expect.that_str(tag.abi).equals("none")
     env.expect.that_str(tag.platform).equals("any")
-
-def _test_parse_wheel_filename(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_parse_wheel_filename_impl)
 
 def _test_parse_wheel_filename_names_impl(env, _target):
     # (filename, expected name), from packaging 26.2.
@@ -160,10 +133,6 @@ def _test_parse_wheel_filename_names_impl(env, _target):
     for filename, expected in cases:
         env.expect.where(filename = filename).that_str(utils.parse_wheel_filename(filename).name).equals(expected)
 
-def _test_parse_wheel_filename_names(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_parse_wheel_filename_names_impl)
-
 def _test_parse_wheel_filename_build_impl(env, _target):
     cases = [
         ("foo-1.0-1-py3-none-any.whl", (1, "")),
@@ -175,10 +144,6 @@ def _test_parse_wheel_filename_build_impl(env, _target):
     ]
     for filename, expected in cases:
         env.expect.where(filename = filename).that_bool(utils.parse_wheel_filename(filename).build == expected).equals(True)
-
-def _test_parse_wheel_filename_build(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_parse_wheel_filename_build_impl)
 
 def _test_parse_wheel_filename_version_impl(env, _target):
     # version.version_str is the raw filename text; canonicalize_version gives
@@ -202,21 +167,16 @@ def _test_parse_wheel_filename_version_impl(env, _target):
     res = utils.parse_wheel_filename("foo-1.0-py2.py3-none-any.whl", validate_order = True)
     env.expect.that_int(len(res.tags)).equals(2)
 
-def _test_parse_wheel_filename_version(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_parse_wheel_filename_version_impl)
-
 def _test_parse_sdist_filename_impl(env, _target):
     res = utils.parse_sdist_filename("foo-1.0.tar.gz")
     env.expect.that_str(res.name).equals("foo")
     env.expect.that_str(res.version.version_str).equals("1.0")
 
-    # (filename, name, normalized version), from packaging 26.2.
+    # (filename, name, normalized version), from packaging 26.3.
     cases = [
         ("Foo_Bar-1.0.zip", "foo-bar", "1.0"),
         ("foo-bar-1.0.tar.gz", "foo-bar", "1.0"),
         ("foo-1.0-1.tar.gz", "foo-1-0", "1"),
-        ("-1.0.tar.gz", "", "1.0"),
         ("foo-1.0+local.tar.gz", "foo", "1.0+local"),
         ("foo-v1.0.zip", "foo", "1.0"),
         ("café-1.0.tar.gz", "café", "1.0"),
@@ -226,28 +186,19 @@ def _test_parse_sdist_filename_impl(env, _target):
         env.expect.where(filename = filename).that_str(res.name).equals(name)
         env.expect.where(filename = filename).that_str(utils.canonicalize_version(res.version, strip_trailing_zero = False)).equals(version)
 
-def _test_parse_sdist_filename(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_parse_sdist_filename_impl)
-
 def _test_parse_wheel_filename_tags_impl(env, _target):
-    # Empty tag components are accepted like packaging.
-    res = utils.parse_wheel_filename("foo-1.0-py3--any.whl")
-    env.expect.that_collection(["{}-{}-{}".format(t.interpreter, t.abi, t.platform) for t in res.tags]).contains_exactly(["py3--any"])
-
     # Repeated compressed components don't produce duplicate tags.
     res = utils.parse_wheel_filename("foo-1.0-py3-none-any.any.whl")
     env.expect.that_int(len(res.tags)).equals(1)
 
-def _test_parse_wheel_filename_tags(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_parse_wheel_filename_tags_impl)
-
 _INVALID_WHEEL_FILENAMES = [
     ("foo-1.0-py3-none-any.zip", "extension must be '.whl'"),
     ("foo-1.0-py3-none-any.WHL", "extension must be '.whl'"),
+    ("foo-1.0-py3-none-any.whl\n", "extension must be '.whl'"),
     ("foo-py3-none-any.whl", "wrong number of parts"),
     ("foo-1.0-1-2-py3-none-any.whl", "wrong number of parts"),
+    ("-1.0-py3-none-any.whl", "Invalid project name"),
+    ("-1.0-1-py3-none-any.whl", "Invalid project name"),
     ("foo__bar-1.0-py3-none-any.whl", "Invalid project name"),
     ("foo bar-1.0-py3-none-any.whl", "Invalid project name"),
     ("foo+bar-1.0-py3-none-any.whl", "Invalid project name"),
@@ -256,12 +207,16 @@ _INVALID_WHEEL_FILENAMES = [
     ("foo-1.0-abc-py3-none-any.whl", "Invalid build number"),
     ("foo-notaversion-py3-none-any.whl", "Invalid wheel filename (invalid version)"),
     ("foo-1.0.-py3-none-any.whl", "Invalid wheel filename (invalid version)"),
+    ("foo-1.0-py3--any.whl", "empty component"),
+    ("foo-1.0-2.7.6-none-any.whl", "invalid interpreter"),
 ]
 
 _INVALID_SDIST_FILENAMES = [
     ("foo-1.0.tgz", "extension must be '.tar.gz' or '.zip'"),
     ("foo-1.0.TAR.GZ", "extension must be '.tar.gz' or '.zip'"),
     ("foo.tar.gz", "Invalid sdist filename"),
+    ("-1.0.tar.gz", "empty project name"),
+    ("-1.0.zip", "empty project name"),
     ("foo-bar.tar.gz", "Invalid sdist filename (invalid version)"),
     ("foo-.tar.gz", "Invalid sdist filename (invalid version)"),
 ]
@@ -292,22 +247,18 @@ def utils_test_suite(name):
         validate_order = True,
     )
 
-    test_suite(
-        name = name + "_standard",
-        tests = [
-            _test_canonicalize_name,
-            _test_is_normalized_name,
-            _test_canonicalize_version,
-            _test_parse_wheel_filename,
-            _test_parse_sdist_filename,
-            _test_parse_wheel_filename_tags,
-            _test_parse_wheel_filename_names,
-            _test_parse_wheel_filename_build,
-            _test_parse_wheel_filename_version,
-        ],
-    )
-
-    native.test_suite(
+    unit_test_suite(
         name = name,
-        tests = [":" + name + "_standard"] + [":" + n for n in failure_tests],
+        tests = {
+            "test_canonicalize_name": _test_canonicalize_name_impl,
+            "test_is_normalized_name": _test_is_normalized_name_impl,
+            "test_canonicalize_version": _test_canonicalize_version_impl,
+            "test_parse_wheel_filename": _test_parse_wheel_filename_impl,
+            "test_parse_sdist_filename": _test_parse_sdist_filename_impl,
+            "test_parse_wheel_filename_tags": _test_parse_wheel_filename_tags_impl,
+            "test_parse_wheel_filename_names": _test_parse_wheel_filename_names_impl,
+            "test_parse_wheel_filename_build": _test_parse_wheel_filename_build_impl,
+            "test_parse_wheel_filename_version": _test_parse_wheel_filename_version_impl,
+        },
+        extra_tests = failure_tests,
     )

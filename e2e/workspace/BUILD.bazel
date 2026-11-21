@@ -1,0 +1,12 @@
+"""Build rules for the WORKSPACE smoke test."""
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("@pypackaging_smoke_test//:check_pypackaging.bzl", "smoke_test")
+
+smoke_test(name = "smoke_test")
+
+# The public `bzl_library` can be depended on.
+bzl_library(
+    name = "bzl_library_test",
+    deps = ["@pypackaging.bzl//:pypackaging"],
+)

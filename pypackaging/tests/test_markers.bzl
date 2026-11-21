@@ -1,11 +1,10 @@
 """Tests for markers.bzl."""
 
-load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
-load("@rules_testing//lib:truth.bzl", "matching")
 load("@rules_testing//lib:util.bzl", "util")
 
 # buildifier: disable=bzl-visibility
 load("//pypackaging/private/markers:markers.bzl", "markers")
+load(":test_helpers.bzl", "expect_failure_test", "unit_test_suite")
 
 _ENV = {
     "implementation_name": "cpython",
@@ -61,10 +60,6 @@ def _test_marker_parser_impl(env, _target):
     env.expect.that_int(len(m)).equals(1)
     item = m[0]
     env.expect.that_str(item[1]).equals("not in")
-
-def _test_marker_parser(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_marker_parser_impl)
 
 def _test_marker_evaluation_impl(env, _target):
     env_vars = {
@@ -188,10 +183,6 @@ def _test_marker_evaluation_impl(env, _target):
     m = markers.parse("(python_version < '3.6' or os_name == 'posix') and sys_platform == 'linux'")
     env.expect.that_bool(markers.evaluate(m, env_vars_prec)).equals(False)
 
-def _test_marker_evaluation(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_marker_evaluation_impl)
-
 def _test_version_marker_fallback_impl(env, _target):
     # Upstream `_eval_op`: an invalid environment version makes the comparison
     # False instead of failing.
@@ -247,10 +238,6 @@ def _test_version_marker_fallback_impl(env, _target):
     env.expect.that_bool(_eval("python_full_version === '3.12.1+'", python_full_version = "3.12.1+")).equals(False)
     env.expect.that_bool(_eval("'local' in python_full_version", python_full_version = "3.12.1+")).equals(True)
 
-def _test_version_marker_fallback(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_version_marker_fallback_impl)
-
 def _test_string_operator_table_impl(env, _target):
     # Upstream `_operators`: `<`/`>` are always False, `<=`/`>=` mean equality.
     env.expect.that_bool(_eval("platform_machine < 'z'")).equals(False)
@@ -268,10 +255,6 @@ def _test_string_operator_table_impl(env, _target):
 
     # Variable-vs-variable compares against the right-hand variable's name.
     env.expect.that_bool(_eval("os_name == python_version", os_name = "python_version")).equals(True)
-
-def _test_string_operator_table(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_string_operator_table_impl)
 
 def _test_list_valued_extra_impl(env, _target):
     active = ["Foo.Bar", "baz", "extra-5-mypkg-cpu"]
@@ -293,10 +276,13 @@ def _test_list_valued_extra_impl(env, _target):
     env.expect.that_bool(_eval("extra == 'baz'", extra = ("baz",))).equals(True)
     env.expect.that_bool(_eval("extra != 'baz'", extra = ("baz",))).equals(False)
 
-    # An empty list: `==` is False, `!=` is True.
+    # An empty list/tuple behaves like "" (no extra selected, matching packaging#1438).
     env.expect.that_bool(_eval("extra == 'baz'", extra = [])).equals(False)
-    env.expect.that_bool(_eval("extra == ''", extra = [])).equals(False)
+    env.expect.that_bool(_eval("extra == ''", extra = [])).equals(True)
+    env.expect.that_bool(_eval("extra == ''", extra = ())).equals(True)
     env.expect.that_bool(_eval("extra != 'baz'", extra = [])).equals(True)
+    env.expect.that_bool(_eval("extra != ''", extra = [])).equals(False)
+    env.expect.that_bool(_eval("extra >= 'z'", extra = [])).equals(False)
 
     # Scalar `extra` keeps upstream semantics (missing / None / "" all mean "").
     env.expect.that_bool(_eval("extra == ''")).equals(True)
@@ -305,10 +291,6 @@ def _test_list_valued_extra_impl(env, _target):
     env.expect.that_bool(_eval("extra in 'foo-bar'", extra = "Foo.Bar")).equals(True)
     env.expect.that_bool(_eval("extra < 'z'", extra = "Foo.Bar")).equals(False)
     env.expect.that_bool(_eval("extra <= 'foo-bar'", extra = "Foo.Bar")).equals(True)
-
-def _test_list_valued_extra(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_list_valued_extra_impl)
 
 def _test_marker_aliases_impl(env, _target):
     # `python_implementation` is an alias for `platform_python_implementation`.
@@ -320,10 +302,6 @@ def _test_marker_aliases_impl(env, _target):
     # Dotted names map to the underscore form.
     env.expect.that_bool(_eval("os.name == 'posix' and sys.platform == 'linux'")).equals(True)
     env.expect.that_bool(_eval("platform.machine == 'x86_64' and platform.version == ''")).equals(True)
-
-def _test_marker_aliases(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_marker_aliases_impl)
 
 def _test_marker_string_literals_impl(env, _target):
     # Quoted strings are decoded like Python string literals (ast.literal_eval).
@@ -343,10 +321,6 @@ def _test_marker_string_literals_impl(env, _target):
     # Unknown escapes are kept verbatim.
     env.expect.that_str(markers.parse("os_name == '\\q\\8'")[0][2].value).equals("\\q\\8")
 
-def _test_marker_string_literals(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_marker_string_literals_impl)
-
 def _test_marker_grammar_impl(env, _target):
     # The empty string is accepted (always true); upstream rejects it.
     env.expect.that_collection(markers.parse("")).has_size(0)
@@ -357,9 +331,8 @@ def _test_marker_grammar_impl(env, _target):
         env.expect.where(marker = s).that_bool(markers.evaluate(markers.parse(s), {})).equals(True)
     env.expect.that_bool(markers.evaluate([], {})).equals(True)
 
-    # Surrounding whitespace and a single trailing newline (regex `$`).
+    # Surrounding whitespace (spaces/tabs).
     env.expect.that_bool(_eval(" \tos_name == 'posix' \t")).equals(True)
-    env.expect.that_bool(_eval("os_name == 'posix'\n")).equals(True)
 
     # No whitespace is needed around quoted strings or parentheses.
     env.expect.that_bool(_eval("os_name=='nt'or(os_name=='posix')")).equals(True)
@@ -376,10 +349,6 @@ def _test_marker_grammar_impl(env, _target):
     m = markers.parse("(extra == 'Foo_Bar')")
     env.expect.that_str(m[0][0][2].value).equals("foo-bar")
 
-def _test_marker_grammar(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_marker_grammar_impl)
-
 def _test_marker_to_string_impl(env, _target):
     cases = [
         ("os_name=='posix'", "os_name == \"posix\""),
@@ -392,18 +361,15 @@ def _test_marker_to_string_impl(env, _target):
         ("extra == os_name", "extra == \"os-name\""),
         ("os_name not  in 'x'", "os_name not in \"x\""),
         ("'a' in extras", "\"a\" in extras"),
-        # Like upstream, quotes inside values aren't escaped.
-        ("os_name == 'a\"b'", "os_name == \"a\"b\""),
-        # Divergence: upstream would print `a and b or c` here.
+        ("'S_P__A_M' in extras", "\"s-p-a-m\" in extras"),
+        ("'Foo_Bar' not in dependency_groups", "\"foo-bar\" not in dependency_groups"),
+        # Uses single quotes when the value contains double quotes (packaging 26.3).
+        ("os_name == 'a\"b'", "os_name == 'a\"b'"),
         ("os_name == 'a' and ((os_name == 'b' or os_name == 'c'))", "os_name == \"a\" and (os_name == \"b\" or os_name == \"c\")"),
     ]
     for src, expected in cases:
         env.expect.where(marker = src).that_str(markers.to_string(markers.parse(src))).equals(expected)
     env.expect.that_str(markers.to_string([])).equals("")
-
-def _test_marker_to_string(name):
-    util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_marker_to_string_impl)
 
 # Failure cases: (marker, environment overrides or None to only parse, expected
 # message fragments).
@@ -416,6 +382,7 @@ _FAILURES = [
     ("(os_name == 'nt' or)", None, ["Expected a marker variable or quoted string"]),
     ("and os_name == 'nt'", None, ["Expected a marker variable or quoted string"]),
     ("()", None, ["Expected a marker variable or quoted string"]),
+    ("os_name == 'posix'\n", None, ["Expected end of marker expression"]),
     ("os_name == 'posix'\n\n", None, ["Expected end of marker expression"]),
     ("\nos_name == 'posix'", None, ["Expected a marker variable or quoted string"]),
     ("os_name == 'posix';", None, ["Expected end of marker expression"]),
@@ -446,24 +413,28 @@ _FAILURES = [
     ("'a' in extras", {"extras": None}, ["Undefined environment variable 'extras'"]),
     # Collections on the left-hand side.
     ("extras == 'a'", {"extras": ["a"]}, ["the left-hand side must be a string"]),
-    # List-valued extra with unsupported operators.
-    ("extra in 'baz,foo'", {"extra": ["foo"]}, ["Operator 'in' is not supported when 'extra' is a list of extras", "extra in \"baz,foo\""]),
+    # Collection-valued extra with unsupported operators.
+    ("extra in 'baz,foo'", {"extra": ["foo"]}, ["Operator 'in' is not supported when 'extra' is a collection of extras", "extra in \"baz,foo\""]),
     ("extra not in 'baz,foo'", {"extra": ["foo"]}, ["Operator 'not in' is not supported"]),
     ("'foo' in extra", {"extra": ["foo"]}, ["Operator 'in' is not supported"]),
     ("extra < 'z'", {"extra": ["foo"]}, ["Operator '<' is not supported"]),
     ("extra ~= 'z'", {"extra": ("foo",)}, ["Operator '~=' is not supported"]),
-    ("extra >= 'z'", {"extra": []}, ["Operator '>=' is not supported"]),
+    ("extra >= 'z'", {"extra": ["foo"]}, ["Operator '>=' is not supported"]),
     ("extra === 'foo'", {"extra": ["foo"]}, ["Operator '===' is not supported", "only == and != are"]),
     # Bad environment value types.
-    ("extra == 'a'", {"extra": 1}, ["must be a string or a list/tuple of strings"]),
-    ("extra == 'a'", {"extra": ["a", 1]}, ["must be a string or a list/tuple of strings"]),
+    ("extra == 'a'", {"extra": 1}, ["must be a string or a list/tuple/set of strings"]),
+    ("extra == 'a'", {"extra": ["a", 1]}, ["must be a string or a list/tuple/set of strings"]),
     ("os_name == 'a'", {"os_name": 1}, ["the left-hand side must be a string"]),
     ("'a' in extras", {"extras": ["a", 1]}, ["must contain only strings"]),
+    # Serialization failure when a marker string contains both quote characters.
+    ("os_name == 'a\\x27b\"c'", "to_string", ["Cannot serialize marker value containing both quote characters"]),
 ]
 
 def _failure_subject_impl(ctx):
     m = markers.parse(ctx.attr.marker)
-    if ctx.attr.env_overrides:
+    if ctx.attr.to_string:
+        markers.to_string(m)
+    elif ctx.attr.env_overrides:
         env = dict(_ENV)
         for k, v in json.decode(ctx.attr.env_overrides).items():
             if v == None:
@@ -480,15 +451,9 @@ _failure_subject = rule(
     attrs = {
         "env_overrides": attr.string(),
         "marker": attr.string(mandatory = True),
+        "to_string": attr.bool(),
     },
 )
-
-def _make_failure_test_impl(fragments):
-    def _impl(env, target):
-        for fragment in fragments:
-            env.expect.that_target(target).failures().contains_predicate(matching.contains(fragment))
-
-    return _impl
 
 def _failure_tests(name):
     names = []
@@ -497,7 +462,8 @@ def _failure_tests(name):
     for i, (marker, overrides, fragments) in enumerate(_FAILURES):
         test_name = "{}_{}".format(name, i)
         env_overrides = ""
-        if overrides != None:
+        to_string = overrides == "to_string"
+        if overrides != None and not to_string:
             encoded = {}
             for k, v in overrides.items():
                 encoded[k] = {"tuple": list(v)} if type(v) == "tuple" else v
@@ -507,13 +473,9 @@ def _failure_tests(name):
             name = test_name + "_subject",
             marker = marker,
             env_overrides = env_overrides,
+            to_string = to_string,
         )
-        analysis_test(
-            name = test_name,
-            target = test_name + "_subject",
-            expect_failure = True,
-            impl = _make_failure_test_impl(fragments),
-        )
+        expect_failure_test(test_name, test_name + "_subject", fragments)
         names.append(test_name)
     return names
 
@@ -523,23 +485,19 @@ def markers_test_suite(name):
     Args:
         name: the name of the test suite
     """
-    test_suite(
-        name = name + "_standard",
-        tests = [
-            _test_marker_parser,
-            _test_marker_evaluation,
-            _test_version_marker_fallback,
-            _test_string_operator_table,
-            _test_list_valued_extra,
-            _test_marker_aliases,
-            _test_marker_string_literals,
-            _test_marker_grammar,
-            _test_marker_to_string,
-        ],
-    )
-
     failure_tests = _failure_tests(name + "_failure")
-    native.test_suite(
+    unit_test_suite(
         name = name,
-        tests = [":" + name + "_standard"] + [":" + n for n in failure_tests],
+        tests = {
+            "test_marker_parser": _test_marker_parser_impl,
+            "test_marker_evaluation": _test_marker_evaluation_impl,
+            "test_version_marker_fallback": _test_version_marker_fallback_impl,
+            "test_string_operator_table": _test_string_operator_table_impl,
+            "test_list_valued_extra": _test_list_valued_extra_impl,
+            "test_marker_aliases": _test_marker_aliases_impl,
+            "test_marker_string_literals": _test_marker_string_literals_impl,
+            "test_marker_grammar": _test_marker_grammar_impl,
+            "test_marker_to_string": _test_marker_to_string_impl,
+        },
+        extra_tests = failure_tests,
     )

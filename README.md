@@ -13,9 +13,11 @@ loading and analysis phases without a Python interpreter.
 ## Requirements
 
 - Bazel 7.1 or newer
-- Bzlmod (WORKSPACE is not supported)
+- Bzlmod, or WORKSPACE with Bazel 7 and 8 (Bazel 9 removed WORKSPACE)
 
 ## Installation
+
+### Bzlmod
 
 Add to your `MODULE.bazel` file (see the
 [releases](https://github.com/jvolkman/pypackaging.bzl/releases) for the
@@ -24,6 +26,45 @@ latest version):
 ```starlark
 bazel_dep(name = "pypackaging.bzl", version = "0.3.0")
 ```
+
+### WORKSPACE
+
+Add to your `WORKSPACE.bazel` file (the release notes have the snippet with
+the checksum of each release). The repository must be named `pypackaging.bzl`,
+so that the same `load` statements work as with Bzlmod:
+
+```starlark
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "pypackaging.bzl",
+    sha256 = "09570564367dfbff313950528376c9ba9ded9025cacb2c731545db19bc27e1e9",
+    strip_prefix = "pypackaging.bzl-0.3.0",
+    url = "https://github.com/jvolkman/pypackaging.bzl/releases/download/v0.3.0/pypackaging.bzl-v0.3.0.tar.gz",
+)
+```
+
+Loading `@pypackaging.bzl` from a `.bzl` file needs nothing else. The
+`@pypackaging.bzl//:pypackaging` `bzl_library` target also needs the
+`bazel_skylib` and `package_metadata` repositories, define them if your
+workspace does not have them yet:
+
+```starlark
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "6e78f0e57de26801f6f564fa7c4a48dc8b36873e416257a92bbb0937eeac8446",
+    url = "https://github.com/bazelbuild/bazel-skylib/releases/download/1.8.2/bazel-skylib-1.8.2.tar.gz",
+)
+
+http_archive(
+    name = "package_metadata",
+    sha256 = "8f27dc7393e3f3bdc793bdc4ba36d67a63c22cc9d38cc65d3204654974ea4563",
+    strip_prefix = "supply-chain-0.0.7/metadata",
+    url = "https://github.com/bazel-contrib/supply-chain/releases/download/v0.0.7/supply-chain-v0.0.7.tar.gz",
+)
+```
+
+Bazel 8 needs `--enable_workspace` to read the `WORKSPACE.bazel` file.
 
 ## Usage
 
@@ -100,7 +141,8 @@ the [changelog](CHANGELOG.md).
 
 ## Differences from pypa/packaging
 
-`pypackaging.bzl` follows `packaging` 26.2 and `pip`'s `get_supported` wrapper.
+`pypackaging.bzl` follows `packaging` 26.3 (plus set-of-extras marker
+evaluation from `pypa/packaging#1438`) and `pip`'s `get_supported` wrapper.
 Because Starlark has no classes, exceptions, or host Python runtime, the API
 differs in the following ways:
 
@@ -116,8 +158,9 @@ differs in the following ways:
     which evaluates to `True`).
   - `markers.evaluate` requires an explicit `environment` dict containing every
     referenced variable (`extra` defaults to `""`).
-  - `environment["extra"]` may also be a list or tuple of active extras
-    (uv-compatible extension for `==` and `!=`).
+  - `environment["extra"]` may also be a list, tuple, or set of active extras
+    for `==` and `!=` (matching `pypa/packaging#1438`; an empty collection
+    evaluates like `""`).
   - `\N{...}` named Unicode escapes in marker string literals are not supported.
 - **Requirements**: `requirements.parse` normalizes `name` and returns sorted,
   deduplicated, normalized `extras` (with original spellings in `raw_name` and
@@ -131,7 +174,7 @@ differs in the following ways:
 
 ## Upstream Sources
 
-1. **[pypa/packaging](https://github.com/pypa/packaging)** (baseline: **26.2**,
+1. **[pypa/packaging](https://github.com/pypa/packaging)** (baseline: **26.3**,
    Apache-2.0 OR BSD-2-Clause): PEP 440 versions and specifiers, PEP 508
    markers and requirements, PEP 425 compatibility tags, and filename/name
    utilities.

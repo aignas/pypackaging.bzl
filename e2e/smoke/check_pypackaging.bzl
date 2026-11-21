@@ -62,7 +62,7 @@ def _check_markers():
         "extra == 'test' with extra = 'test'",
     )
 
-    # Non-standard extension: a list-valued "extra" tests membership.
+    # Set-of-extras evaluation (matching pypa/packaging#1438).
     _check(
         markers.evaluate(markers.parse("extra == 'b'"), dict(_LINUX_CP311_ENV, extra = ["a", "b"])),
         "extra == 'b' with extra = ['a', 'b']",
@@ -70,7 +70,7 @@ def _check_markers():
 
 def _check_requirements():
     req = pypackaging.requirements.parse("Foo_Bar[baz,qux]>=1.0,<2; python_version >= '3.8'")
-    _check(pypackaging.utils.canonicalize_name(req.name) == "foo-bar", "requirement name")
+    _check(req.name == "foo-bar", "requirement name")
     _check(sorted(req.extras) == ["baz", "qux"], "requirement extras")
     specs = sorted([(s.operator, s.version) for s in req.specifier.specs])
     _check(specs == [("<", "2"), (">=", "1.0")], "requirement specifiers: {}".format(specs))
