@@ -2,8 +2,8 @@
 
 ## Development
 
-- Bazel is pinned in `.bazelversion` (also in `docs/`, `e2e/smoke/` and
-  `e2e/workspace/`);
+- Bazel is pinned in `.bazelversion` (also in `docs/`, `e2e/smoke/`,
+  `e2e/workspace/` and `perf/`);
   use [Bazelisk](https://github.com/bazelbuild/bazelisk).
 - Unit tests: `bazel test //...` in the repository root.
 - Smoke test of the public API (also run by BCR presubmit):
@@ -11,6 +11,9 @@
 - The same smoke test with a `WORKSPACE.bazel` file instead of Bzlmod:
   `cd e2e/workspace && bazel test //...`. It cannot run with Bazel 9,
   which removed WORKSPACE.
+- Performance: `cd perf && bazel test //...` fails if the amount of work that
+  the Starlark code does for the measured workloads changes, see
+  [perf/README.md](perf/README.md) for how to measure and update the numbers.
 - API docs: `docs/pypackaging.md` is generated from docstrings. After
   changing a public docstring, run `cd docs && bazel run //:update` and
   verify with `cd docs && bazel test //...`.
