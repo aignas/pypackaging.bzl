@@ -76,8 +76,9 @@ jobs:
         run: bazel test $LOCKFILE_FLAGS //...
         working-directory: e2e/smoke
       - name: Run WORKSPACE E2E Tests
-        # Bazel 9 removed WORKSPACE.
-        if: matrix.bazel != '9.x'
+        # Bazel 9 removed WORKSPACE. On Windows the shell toolchain that is
+        # needed to run the tests is only set up with Bzlmod.
+        if: matrix.bazel != '9.x' && runner.os != 'Windows'
         run: bazel test //...
         working-directory: e2e/workspace
   pre-commit:
