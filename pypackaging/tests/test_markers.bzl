@@ -357,9 +357,9 @@ def _test_marker_grammar_impl(env, _target):
         env.expect.where(marker = s).that_bool(markers.evaluate(markers.parse(s), {})).equals(True)
     env.expect.that_bool(markers.evaluate([], {})).equals(True)
 
-    # Surrounding whitespace and a single trailing newline (regex `$`).
+    # Surrounding whitespace. A trailing line break is rejected, see the
+    # failure cases.
     env.expect.that_bool(_eval(" \tos_name == 'posix' \t")).equals(True)
-    env.expect.that_bool(_eval("os_name == 'posix'\n")).equals(True)
 
     # No whitespace is needed around quoted strings or parentheses.
     env.expect.that_bool(_eval("os_name=='nt'or(os_name=='posix')")).equals(True)
@@ -389,13 +389,30 @@ def _test_marker_to_string_impl(env, _target):
         ("python_implementation == 'CPython' and platform.machine == 'x'", "platform_python_implementation == \"CPython\" and platform_machine == \"x\""),
         ("extra == 'Foo_Bar'", "extra == \"foo-bar\""),
         ("'Foo_Bar' == extra", "\"foo-bar\" == extra"),
-        ("extra == os_name", "extra == \"os-name\""),
+        ("(extra == 'Foo_Bar' or extra == 'Baz') and python_version >= '3'", "(extra == \"foo-bar\" or extra == \"baz\") and python_version >= \"3\""),
+
+        # A variable that is compared with `extra` is not a value to normalize.
+        ("extra == os_name", "extra == os_name"),
+        ("os_name == extra", "os_name == extra"),
+
+        # The values that are tested for the membership in the sets are
+        # normalized too.
+        ("'S_P__A_M' in extras", "\"s-p-a-m\" in extras"),
+        ("'Foo_Bar' not in dependency_groups", "\"foo-bar\" not in dependency_groups"),
+        ("'A_B' == extras", "\"a-b\" == extras"),
+        ("extras == 'A_B'", "extras == \"A_B\""),
+        ("os_name in extras", "os_name in extras"),
         ("os_name not  in 'x'", "os_name not in \"x\""),
         ("'a' in extras", "\"a\" in extras"),
-        # Like upstream, quotes inside values aren't escaped.
-        ("os_name == 'a\"b'", "os_name == \"a\"b\""),
-        # Divergence: upstream would print `a and b or c` here.
+        # Like upstream, quotes inside values aren't escaped, the other quote
+        # is used to delimit the value instead.
+        ("os_name == 'a\"b'", "os_name == 'a\"b'"),
+        ("os_name == \"a'b\"", "os_name == \"a'b\""),
+        ("'a\" == os_name or python_version >= \"0\" or \"b' == os_name", "'a\" == os_name or python_version >= \"0\" or \"b' == os_name"),
+
+        # A nested group keeps its parentheses.
         ("os_name == 'a' and ((os_name == 'b' or os_name == 'c'))", "os_name == \"a\" and (os_name == \"b\" or os_name == \"c\")"),
+        ("(os_name == 'a' and (os_name == 'b'))", "os_name == \"a\" and os_name == \"b\""),
     ]
     for src, expected in cases:
         env.expect.where(marker = src).that_str(markers.to_string(markers.parse(src))).equals(expected)
@@ -416,6 +433,9 @@ _FAILURES = [
     ("(os_name == 'nt' or)", None, ["Expected a marker variable or quoted string"]),
     ("and os_name == 'nt'", None, ["Expected a marker variable or quoted string"]),
     ("()", None, ["Expected a marker variable or quoted string"]),
+    ("os_name == 'posix'\n", None, ["Invalid marker: Expected end of marker expression\n    os_name == 'posix'\n\n                      ^"]),
+    ("os_name == 'posix'\r", None, ["Expected end of marker expression"]),
+    ("os_name == 'posix'\r\n", None, ["Expected end of marker expression"]),
     ("os_name == 'posix'\n\n", None, ["Expected end of marker expression"]),
     ("\nos_name == 'posix'", None, ["Expected a marker variable or quoted string"]),
     ("os_name == 'posix';", None, ["Expected end of marker expression"]),
@@ -430,9 +450,10 @@ _FAILURES = [
     ("os_namex == 'a'", None, ["Expected a marker variable or quoted string"]),
     ("os_name == 'a", None, ["Expected a marker variable or quoted string"]),
     # String literals that `ast.literal_eval` rejects.
-    ("os_name == '\\'", None, ["Invalid string literal"]),
-    ("os_name == 'a\\'", None, ["Invalid string literal"]),
-    ("os_name == 'a\nb'", None, ["Invalid string literal"]),
+    ("os_name == '\\'", None, ["Invalid quoted string"]),
+    ("os_name == 'a\\'", None, ["Invalid quoted string"]),
+    ("os_name == \"C:\\\"", None, ["Invalid marker: Invalid quoted string (the closing quote is escaped)\n    os_name == \"C:\\\"\n               ~~~~~^"]),
+    ("os_name == 'a\nb'", None, ["Invalid quoted string"]),
     ("os_name == '\\x4'", None, ["truncated \\x escape"]),
     ("os_name == '\\u12'", None, ["truncated \\u escape"]),
     ("os_name == '\\U00110000'", None, ["illegal Unicode character"]),
@@ -445,7 +466,8 @@ _FAILURES = [
     ("os_name == 'a'", {"os_name": None}, ["Undefined environment variable 'os_name' in marker `os_name == \"a\"`"]),
     ("'a' in extras", {"extras": None}, ["Undefined environment variable 'extras'"]),
     # Collections on the left-hand side.
-    ("extras == 'a'", {"extras": ["a"]}, ["the left-hand side must be a string"]),
+    ("extras == 'a'", {"extras": ["a"]}, ["the left-hand side must be a string", "can only be used with the membership form (e.g. \"<name>\" in extras)"]),
+    ("dependency_groups >= 'a'", {"dependency_groups": ["a"]}, ["the left-hand side must be a string"]),
     # List-valued extra with unsupported operators.
     ("extra in 'baz,foo'", {"extra": ["foo"]}, ["Operator 'in' is not supported when 'extra' is a list of extras", "extra in \"baz,foo\""]),
     ("extra not in 'baz,foo'", {"extra": ["foo"]}, ["Operator 'not in' is not supported"]),

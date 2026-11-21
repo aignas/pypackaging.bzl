@@ -158,8 +158,10 @@ def _test_freethreaded(name):
     analysis_test(name = name, target = name + "_subject", impl = _test_freethreaded_impl)
 
 def _test_expand_allowed_platforms_manylinux_impl(env, _target):
+    # Like packaging's _linux_platforms(), the native platform is the first.
     platforms = tags_internal.expand_allowed_platforms(["manylinux_2_17_x86_64"])
     env.expect.that_collection(platforms).contains_exactly([
+        "linux_x86_64",
         "manylinux_2_17_x86_64",
         "manylinux2014_x86_64",
         "manylinux_2_16_x86_64",
@@ -176,7 +178,6 @@ def _test_expand_allowed_platforms_manylinux_impl(env, _target):
         "manylinux_2_6_x86_64",
         "manylinux_2_5_x86_64",
         "manylinux1_x86_64",
-        "linux_x86_64",
     ]).in_order()
 
 def _test_expand_allowed_platforms_manylinux(name):
@@ -186,12 +187,12 @@ def _test_expand_allowed_platforms_manylinux(name):
 def _test_expand_allowed_platforms_armv8l_impl(env, _target):
     platforms = tags_internal.expand_allowed_platforms(["manylinux_2_17_armv8l"])
     env.expect.that_collection(platforms).contains_exactly([
+        "linux_armv8l",
+        "linux_armv7l",
         "manylinux_2_17_armv8l",
         "manylinux2014_armv8l",
         "manylinux_2_17_armv7l",
         "manylinux2014_armv7l",
-        "linux_armv8l",
-        "linux_armv7l",
     ]).in_order()
 
 def _test_expand_allowed_platforms_armv8l(name):
@@ -201,10 +202,10 @@ def _test_expand_allowed_platforms_armv8l(name):
 def _test_expand_allowed_platforms_musllinux_order_impl(env, _target):
     platforms = tags_internal.expand_allowed_platforms(["musllinux_1_2_x86_64"])
     env.expect.that_collection(platforms).contains_exactly([
+        "linux_x86_64",
         "musllinux_1_2_x86_64",
         "musllinux_1_1_x86_64",
         "musllinux_1_0_x86_64",
-        "linux_x86_64",
     ]).in_order()
 
 def _test_expand_allowed_platforms_musllinux_order(name):
@@ -214,9 +215,9 @@ def _test_expand_allowed_platforms_musllinux_order(name):
 def _test_expand_allowed_platforms_legacy_order_impl(env, _target):
     platforms = tags_internal.expand_allowed_platforms(["manylinux2014_aarch64"])
     env.expect.that_collection(platforms).contains_exactly([
+        "linux_aarch64",
         "manylinux_2_17_aarch64",
         "manylinux2014_aarch64",
-        "linux_aarch64",
     ]).in_order()
 
 def _test_expand_allowed_platforms_legacy_order(name):
@@ -224,14 +225,33 @@ def _test_expand_allowed_platforms_legacy_order(name):
     analysis_test(name = name, target = name + "_subject", impl = _test_expand_allowed_platforms_legacy_order_impl)
 
 def _test_expand_allowed_platforms_many_and_musl_order_impl(env, _target):
-    # Matches packaging's _linux_platforms(): manylinux, then musllinux, then linux.
+    # Matches packaging's _linux_platforms(): linux, then manylinux, then musllinux.
     platforms = tags_internal.expand_allowed_platforms(["manylinux_2_17_aarch64", "musllinux_1_1_aarch64"])
     env.expect.that_collection(platforms).contains_exactly([
+        "linux_aarch64",
         "manylinux_2_17_aarch64",
         "manylinux2014_aarch64",
         "musllinux_1_1_aarch64",
         "musllinux_1_0_aarch64",
+    ]).in_order()
+
+    # The native platforms of all of the architectures are before the others.
+    platforms = tags_internal.expand_allowed_platforms(["musllinux_1_0_aarch64", "musllinux_1_0_x86_64"])
+    env.expect.that_collection(platforms).contains_exactly([
         "linux_aarch64",
+        "linux_x86_64",
+        "musllinux_1_0_aarch64",
+        "musllinux_1_0_x86_64",
+    ]).in_order()
+
+    # They are at the position of the first Linux platform.
+    platforms = tags_internal.expand_allowed_platforms(["win_amd64", "manylinux_2_17_aarch64", "win32"])
+    env.expect.that_collection(platforms).contains_exactly([
+        "win_amd64",
+        "linux_aarch64",
+        "manylinux_2_17_aarch64",
+        "manylinux2014_aarch64",
+        "win32",
     ]).in_order()
 
     # An explicitly requested linux_<arch> keeps its position.
@@ -249,20 +269,20 @@ def _test_expand_allowed_platforms_many_and_musl_order(name):
 def _test_get_supported_linux_priority_impl(env, _target):
     tags = get_supported(version = "311", platforms = ["manylinux_2_28_x86_64"], impl = "cp", abis = ["cp311"])
 
-    # Same priority as packaging 26.2: the newest manylinux tag first and the
-    # generic linux tag after all manylinux tags for a given ABI.
-    env.expect.that_str(tags[0]).equals("cp311-cp311-manylinux_2_28_x86_64")
-    env.expect.that_int(tags.index("cp311-cp311-linux_x86_64")).equals(27)
-    env.expect.that_str(tags[26]).equals("cp311-cp311-manylinux1_x86_64")
-    env.expect.that_str(tags[28]).equals("cp311-abi3-manylinux_2_28_x86_64")
+    # Same priority as packaging 26.3: the native linux tag first and then
+    # the manylinux tags from the newest one for a given ABI.
+    env.expect.that_str(tags[0]).equals("cp311-cp311-linux_x86_64")
+    env.expect.that_str(tags[1]).equals("cp311-cp311-manylinux_2_28_x86_64")
+    env.expect.that_str(tags[27]).equals("cp311-cp311-manylinux1_x86_64")
+    env.expect.that_str(tags[28]).equals("cp311-abi3-linux_x86_64")
 
     tags = get_supported(version = "312", platforms = ["musllinux_1_2_x86_64"], impl = "cp", abis = ["cp312"])
     env.expect.that_collection(tags[:5]).contains_exactly([
+        "cp312-cp312-linux_x86_64",
         "cp312-cp312-musllinux_1_2_x86_64",
         "cp312-cp312-musllinux_1_1_x86_64",
         "cp312-cp312-musllinux_1_0_x86_64",
-        "cp312-cp312-linux_x86_64",
-        "cp312-abi3-musllinux_1_2_x86_64",
+        "cp312-abi3-linux_x86_64",
     ]).in_order()
 
 def _test_get_supported_linux_priority(name):
@@ -270,17 +290,34 @@ def _test_get_supported_linux_priority(name):
     analysis_test(name = name, target = name + "_subject", impl = _test_get_supported_linux_priority_impl)
 
 def _test_freethreaded_filtered_abis_impl(env, _target):
-    # abi3/none are removed before checking the first ABI, like packaging.
+    # Like packaging, the first ABI is checked before abi3/none are removed.
     tags = cpython_tags((3, 13), ["abi3", "cp313t"], ["any"])
+    env.expect.that_collection(tags).contains_exactly([
+        "cp313-cp313t-any",
+        "cp313-abi3-any",
+        "cp313-none-any",
+    ] + ["cp3{}-abi3-any".format(m) for m in range(12, 1, -1)]).in_order()
+
+    tags = cpython_tags((3, 13), ["none", "cp313t"], ["any"])
+    env.expect.that_collection(tags).contains("cp313-abi3-any")
+    env.expect.that_collection(tags).not_contains("cp313-abi3t-any")
+
+    # The explicit abi3t does not result in duplicate tags.
+    tags = cpython_tags((3, 13), ["cp313t", "abi3t", "abi3", "none"], ["any"])
     env.expect.that_collection(tags).contains_exactly([
         "cp313-cp313t-any",
         "cp313-abi3t-any",
         "cp313-none-any",
     ] + ["cp3{}-abi3t-any".format(m) for m in range(12, 1, -1)]).in_order()
 
-    tags = cpython_tags((3, 13), ["none", "cp313t"], ["any"])
-    env.expect.that_collection(tags).contains("cp313-abi3t-any")
-    env.expect.that_collection(tags).not_contains("cp313-abi3-any")
+    # It is an ABI like any other if the first one is not free-threaded.
+    tags = cpython_tags((3, 13), ["cp313", "abi3t"], ["any"])
+    env.expect.that_collection(tags[:4]).contains_exactly([
+        "cp313-cp313-any",
+        "cp313-abi3t-any",
+        "cp313-abi3-any",
+        "cp313-none-any",
+    ]).in_order()
 
     # "cp" must be followed by digits for the ABI to count as free-threaded.
     tags = cpython_tags((3, 13), ["cpt"], ["any"])
@@ -346,9 +383,10 @@ def _test_manylinux_glibc_major_3_impl(env, _target):
     env.expect.that_int(len(platforms)).equals(1 + 51 + 34 + 1)
 
     tags = get_supported(version = "311", platforms = ["manylinux_3_0_x86_64"], impl = "cp", abis = ["cp311"])
-    env.expect.that_str(tags[0]).equals("cp311-cp311-manylinux_3_0_x86_64")
-    env.expect.that_str(tags[1]).equals("cp311-cp311-manylinux_2_50_x86_64")
-    env.expect.that_int(tags.index("cp311-cp311-linux_x86_64")).equals(50)
+    env.expect.that_str(tags[0]).equals("cp311-cp311-linux_x86_64")
+    env.expect.that_str(tags[1]).equals("cp311-cp311-manylinux_3_0_x86_64")
+    env.expect.that_str(tags[2]).equals("cp311-cp311-manylinux_2_50_x86_64")
+    env.expect.that_str(tags[50]).equals("cp311-cp311-manylinux1_x86_64")
 
 def _test_manylinux_glibc_major_3(name):
     util.helper_target(native.filegroup, name = name + "_subject")
@@ -391,22 +429,57 @@ def _test_parse_tag_dedupe(name):
     util.helper_target(native.filegroup, name = name + "_subject")
     analysis_test(name = name, target = name + "_subject", impl = _test_parse_tag_dedupe_impl)
 
-def _test_parse_tag_empty_components_impl(env, _target):
-    # Like packaging, empty components are accepted.
-    env.expect.that_collection(_tag_strs(parse_tag("py3--any"))).contains_exactly(["py3--any"])
-    env.expect.that_collection(_tag_strs(parse_tag("-none-any"))).contains_exactly(["-none-any"])
-    env.expect.that_collection(_tag_strs(parse_tag("py3-none-any."))).contains_exactly([
-        "py3-none-any",
-        "py3-none-",
-    ]).in_order()
-    env.expect.that_collection(_tag_strs(parse_tag("--"))).contains_exactly(["--"])
+def _test_parse_tag_invalid_impl(env, _target):
+    # (tag, validate_order, limit, error kind, error), the errors are the
+    # same as of packaging 26.3.
+    cases = [
+        # Empty components
+        ("py3--any", False, None, "invalid_tag", "Tag \"py3--any\" has an empty component: \"\""),
+        ("-none-any", False, None, "invalid_tag", "Tag \"-none-any\" has an empty component: \"\""),
+        ("py3-none-any.", False, None, "invalid_tag", "Tag \"py3-none-any.\" has an empty component: \"any.\""),
+        ("py3.-none-any", False, None, "invalid_tag", "Tag \"py3.-none-any\" has an empty component: \"py3.\""),
+        ("--", False, None, "invalid_tag", "Tag \"--\" has an empty component: \"\""),
+        ("", False, None, "invalid_tag", "Tag \"\" has an empty component: \"\""),
+        # The number of the components
+        ("py3-none", False, None, "invalid_tag", "Tag \"py3-none\" must have exactly three components"),
+        ("py3-none-any-x", False, None, "invalid_tag", "Tag \"py3-none-any-x\" must have exactly three components"),
+        # The interpreter is not an identifier
+        ("2.7.6-none-any", False, None, "invalid_tag", "Tag \"2.7.6-none-any\" has an invalid interpreter: \"2\""),
+        ("3py-none-any", False, None, "invalid_tag", "Tag \"3py-none-any\" has an invalid interpreter: \"3py\""),
+        ("py 3-none-any", False, None, "invalid_tag", "Tag \"py 3-none-any\" has an invalid interpreter: \"py 3\""),
+        ("py3.py+-none-any", False, None, "invalid_tag", "Tag \"py3.py+-none-any\" has an invalid interpreter: \"py+\""),
+        # The order, which is checked before the number of the components
+        ("py3.py2-none-any", True, None, "unsorted_tags", "Tag component \"py3.py2\" is not in sorted order per PEP 425"),
+        ("b.a-x", True, None, "unsorted_tags", "Tag component \"b.a\" is not in sorted order per PEP 425"),
+        # The limit, which is checked before the number of the components
+        ("py2.py3-none-a.b", False, 3, "too_many_tags", "Compressed tag set would generate 4 tags, exceeding limit 3"),
+        ("py3-none-any", False, 0, "too_many_tags", "Compressed tag set would generate 1 tags, exceeding limit 0"),
+        ("a.b", False, 1, "too_many_tags", "Compressed tag set would generate 2 tags, exceeding limit 1"),
+    ]
+    for tag, validate_order, limit, kind, error in cases:
+        got = tags_internal.try_parse_tag(tag, validate_order, limit)
+        env.expect.where(tag = tag).that_bool(got[0] == None).equals(True)
+        env.expect.where(tag = tag).that_str(got[1]).equals(kind)
+        env.expect.where(tag = tag).that_str(got[2]).equals(error)
 
-def _test_parse_tag_empty_components(name):
+    # Only the interpreter has to be an identifier and it can start with an
+    # underscore.
+    env.expect.that_collection(_tag_strs(parse_tag("_py-n one-a+ny"))).contains_exactly(["_py-n one-a+ny"])
+
+    # Any non-ASCII character is accepted in the interpreter.
+    env.expect.that_collection(_tag_strs(parse_tag("p\303\275-none-any"))).contains_exactly(["p\303\275-none-any"])
+    env.expect.that_str(tags_internal.try_parse_tag("p\303\275+-none-any")[1]).equals("invalid_tag")
+
+    # The limit is for the number of the tags that would be generated.
+    env.expect.that_int(len(parse_tag("py2.py3-none-a.b", limit = 4))).equals(4)
+    env.expect.that_int(len(parse_tag("py3.py3-none-any", limit = 2))).equals(1)
+
+def _test_parse_tag_invalid(name):
     util.helper_target(native.filegroup, name = name + "_subject")
-    analysis_test(name = name, target = name + "_subject", impl = _test_parse_tag_empty_components_impl)
+    analysis_test(name = name, target = name + "_subject", impl = _test_parse_tag_invalid_impl)
 
 def _test_parse_tag_wrong_parts_impl(env, target):
-    env.expect.that_target(target).failures().contains_predicate(matching.contains("Invalid tag"))
+    env.expect.that_target(target).failures().contains_predicate(matching.contains("must have exactly three components"))
 
 def _test_parse_tag_wrong_parts(name):
     util.helper_target(_parse_tag_subject, name = name + "_subject", tag = "py3-none")
@@ -426,7 +499,7 @@ def _test_expand_apple_custom_prefix_impl(env, _target):
         "macosxcustom_10_9_x86_64",
         "macosxcustom_10_9_intel",
         "macosxcustom_10_9_fat64",
-        "macosxcustom_10_9_fat32",
+        "macosxcustom_10_9_fat3",
         "macosxcustom_10_9_universal2",
         "macosxcustom_10_9_universal",
     ]).in_order()
@@ -500,8 +573,8 @@ def _test_select_compatible_impl(env, _target):
     ]
     tagged = [(f, parse_tag(f[len("foo-1.0-"):-len(".whl")])) for f in filenames]
     expected = [
-        "foo-1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
         "foo-1.0-cp311-cp311-linux_x86_64.whl",
+        "foo-1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
         "foo-1.0-cp311-abi3-manylinux_2_28_x86_64.whl",
         "foo-1.0-py3-none-any.whl",
         "foo-1.0-py2.py3-none-any.whl",
@@ -576,7 +649,7 @@ def tags_test_suite(name):
             _test_manylinux_glibc_major_3,
             _test_parse_tag,
             _test_parse_tag_dedupe,
-            _test_parse_tag_empty_components,
+            _test_parse_tag_invalid,
             _test_parse_tag_wrong_parts,
             _test_parse_tag_unsorted,
             _test_expand_apple_custom_prefix,

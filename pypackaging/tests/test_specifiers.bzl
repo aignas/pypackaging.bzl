@@ -393,9 +393,9 @@ def _test_compatible_release_impl(env, _target):
         env.expect.that_bool(specifiers.contains(specifiers.parse(spec_str), version)).equals(False)
         env.expect.that_bool(specifiers.set_contains(specifiers.parse_set(spec_str), version)).equals(False)
 
-    # Intentional divergence: the prefix comes from the normalized spec version,
-    # as PEP 440 says. packaging 26.2 derives it from the raw string, so it
-    # treats ~=1.0c1 as ==1.0.* and ~=v1.0 as matching nothing.
+    # The prefix comes from the normalized spec version, as PEP 440 says.
+    # packaging derived it from the raw string before 26.3, so it treated
+    # ~=1.0c1 as ==1.0.* and ~=v1.0 as matching nothing.
     for version, spec_str in [
         ("1.1", "~=1.0c1"),
         ("1.5", "~=1.0.c1"),
@@ -416,7 +416,7 @@ def _test_compatible_release_impl(env, _target):
     env.expect.that_bool(specifiers.contains(specifiers.parse("~=1.0c1"), "2.0")).equals(False)
     env.expect.that_bool(specifiers.contains(specifiers.parse("~=v1.0"), "2.0")).equals(False)
 
-    # Lookalikes that packaging 26.2 handles the same way (no divergence).
+    # Lookalikes that packaging always handled the same way.
     for version, spec_str, expected in [
         ("1.5", "~=1.0RC1", True),
         ("1.5", "~=1.0-c1", True),
@@ -596,7 +596,7 @@ def _test_exclusive_ordered(name):
     util.helper_target(native.filegroup, name = name + "_subject")
     analysis_test(name = name, target = name + "_subject", impl = _test_exclusive_ordered_impl)
 
-# Expected values below come from packaging 26.2.
+# Expected values below come from packaging 26.3.
 _PRE_OPTS = [None, True, False]
 
 def _test_prereleases_contains_impl(env, _target):

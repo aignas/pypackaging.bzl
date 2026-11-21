@@ -39,7 +39,9 @@ def cpython_tags(python_version, abis, platforms):
     Args:
         python_version: The Python version tuple.
         abis: A list of ABIs. Every `abi3` and `none` entry is removed (they
-            are handled separately); packaging only removes the first of each.
+            are handled separately) and so is every `abi3t` entry if the first
+            ABI is a free-threaded one; packaging only removes the first of
+            each.
         platforms: A list of platforms.
 
     Returns:
@@ -49,15 +51,13 @@ def cpython_tags(python_version, abis, platforms):
     version_str = "".join([str(p) for p in python_version[:2]])
     interpreter = "cp" + version_str
 
-    explicit_abis = []
-    if abis:
-        for abi in abis:
-            if abi not in ("abi3", "none"):
-                explicit_abis.append(abi)
+    # Free-threading is detected on the ABI list as it is given, before
+    # lowercasing, like packaging.
+    threading = _is_threaded_cpython(abis)
 
-    # Free-threading is detected on the filtered ABI list, before lowercasing,
-    # like packaging.
-    threading = _is_threaded_cpython(explicit_abis)
+    # The stable ABIs and `none` are handled later.
+    handled_abis = ("abi3", "abi3t", "none") if threading else ("abi3", "none")
+    explicit_abis = [abi for abi in abis or [] if abi not in handled_abis]
 
     platforms = [p.lower() for p in platforms]
     for abi in explicit_abis:

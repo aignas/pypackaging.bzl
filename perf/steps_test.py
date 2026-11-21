@@ -9,17 +9,17 @@ from workloads import workloads
 # numbers with the output of `bazel run //:benchmark`.
 _STEPS = {
     # keep sorted
-    "evaluate_long": 2588,
+    "evaluate_long": 2587,
     "evaluate_long_parsed": 817,
-    "evaluate_string": 191,
-    "evaluate_two_strings": 380,
-    "evaluate_version": 292,
+    "evaluate_string": 190,
+    "evaluate_two_strings": 379,
+    "evaluate_version": 291,
     "evaluate_version_parsed": 152,
-    "parse_long": 1772,
-    "requirement_parse": 591,
+    "parse_long": 1771,
+    "requirement_parse": 589,
     "specifier_set_contains": 64,
     "specifier_set_parse": 155,
-    "tags_get_supported": 2602,
+    "tags_get_supported": 2604,
     "version_is_compatible": 30,
     "version_is_eq_prefix": 24,
     "version_is_ge": 22,
@@ -29,7 +29,7 @@ _STEPS = {
     "version_parse_invalid": 16,
     "version_parse_pre_release": 124,
     "version_parse_release": 35,
-    "wheel_filename_parse": 197,
+    "wheel_filename_parse": 213,
 }
 
 # The number of the steps slightly depends on the Python version.

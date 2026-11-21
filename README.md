@@ -141,7 +141,7 @@ the [changelog](CHANGELOG.md).
 
 ## Differences from pypa/packaging
 
-`pypackaging.bzl` follows `packaging` 26.2 and `pip`'s `get_supported` wrapper.
+`pypackaging.bzl` follows `packaging` 26.3 and `pip`'s `get_supported` wrapper.
 Because Starlark has no classes, exceptions, or host Python runtime, the API
 differs in the following ways:
 
@@ -151,7 +151,8 @@ differs in the following ways:
   use `version.to_string(v)` for the normalized string (`version_str` retains
   the input text).
 - **Specifiers**: Pass `prereleases` to `contains`, `set_contains`, `filter`, or
-  `set_filter`. `~=` derives its prefix from the normalized version per PEP 440.
+  `set_filter`. The version ranges (`packaging.ranges`, `SpecifierSet.to_range` and the
+  set relations) are not provided.
 - **Markers**:
   - `markers.parse` accepts empty or whitespace-only strings (returning `[]`,
     which evaluates to `True`).
@@ -165,14 +166,15 @@ differs in the following ways:
   `raw_extras`). `specifier` is `None` for URL requirements.
 - **Tags**: `tags.get_supported` requires `version` (no host interpreter
   fallback) and expands `manylinux*` and `musllinux*` platform tags into their
-  full compatibility sequences. `tags.parse_tag` returns a deduplicated list in
-  component order rather than a `frozenset`.
+  full compatibility sequences, with the native `linux_<arch>` tags first.
+  `tags.parse_tag` returns a deduplicated list in component order rather than
+  a `frozenset`.
 - **ASCII case folding**: `utils.canonicalize_name` and `===` fold case for
   ASCII letters only.
 
 ## Upstream Sources
 
-1. **[pypa/packaging](https://github.com/pypa/packaging)** (baseline: **26.2**,
+1. **[pypa/packaging](https://github.com/pypa/packaging)** (baseline: **26.3**,
    Apache-2.0 OR BSD-2-Clause): PEP 440 versions and specifiers, PEP 508
    markers and requirements, PEP 425 compatibility tags, and filename/name
    utilities.
@@ -181,6 +183,11 @@ differs in the following ways:
 
 Upstream copyright notices and license texts are in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [LICENSES/](LICENSES).
+
+The behaviour is compared with `packaging` itself: the test cases in
+`pypackaging/tests/packaging_cases` are generated from its test-suite with the
+expected values computed by that release, see
+[conformance/README.md](conformance/README.md).
 
 ## Contributing
 

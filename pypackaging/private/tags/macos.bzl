@@ -11,11 +11,11 @@ def _mac_binary_formats(version, cpu_arch):
     if cpu_arch == "x86_64":
         if version < (10, 4):
             return []
-        formats.extend(["intel", "fat64", "fat32"])
+        formats.extend(["intel", "fat64", "fat3"])
     elif cpu_arch == "i386":
         if version < (10, 4):
             return []
-        formats.extend(["intel", "fat32", "fat"])
+        formats.extend(["intel", "fat3", "fat"])
     elif cpu_arch == "ppc64":
         if version > (10, 5) or version < (10, 4):
             return []
@@ -23,7 +23,7 @@ def _mac_binary_formats(version, cpu_arch):
     elif cpu_arch == "ppc":
         if version > (10, 6):
             return []
-        formats.extend(["fat32", "fat"])
+        formats.extend(["fat3", "fat"])
 
     if cpu_arch in ("arm64", "x86_64"):
         formats.append("universal2")

@@ -1,4 +1,4 @@
-"""Conformance test cases generated from `packaging==26.2`.
+"""Conformance test cases generated from `packaging==26.3`.
 
 GENERATED FILE, DO NOT EDIT. Update with:
 
@@ -57,12 +57,16 @@ INVALID_MARKERS = [
     "python_version >= 1.0 and (python_version)",
     "(python_version == \"2.7\" and os_name == \"linux\"",
     "(python_version == \"2.7\") with random text",
+    "python_version >= \"3\"\n",
+    "python_version >= \"3\"\r",
+    "python_version >= \"3\"\r\n",
 ]
 
 # (marker, normalized)
 STR_CASES = [
     ("python_version == '2.7'", "python_version == \"2.7\""),
     ("python_version == \"2.7\"", "python_version == \"2.7\""),
+    ("'a\" == os_name or python_version >= \"0\" or \"b' == os_name", "'a\" == os_name or python_version >= \"0\" or \"b' == os_name"),
     ("python_version == \"2.7\" and os_name == \"linux\"", "python_version == \"2.7\" and os_name == \"linux\""),
     ("python_version == \"2.7\" or os_name == \"linux\"", "python_version == \"2.7\" or os_name == \"linux\""),
     ("python_version == \"2.7\" and os_name == \"linux\" or sys_platform == \"win32\"", "python_version == \"2.7\" and os_name == \"linux\" or sys_platform == \"win32\""),

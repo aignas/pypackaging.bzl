@@ -2,6 +2,7 @@
 
 Derived from pypa/pip: pip/_internal/utils/compatibility_tags.py (MIT)
 and pypa/packaging: packaging/tags.py (Apache 2.0 / BSD).
+Baseline: pypa/packaging 26.3
 See README.md for details.
 """
 
@@ -21,7 +22,7 @@ _ARCH_FALLBACKS = {
     "armv8l": ["armv8l", "armv7l"],
 }
 
-def _linux_fallbacks(archs):
+def _native_linux_platforms(archs):
     return ["linux_" + a for a in archs]
 
 def _match_apple_platform(platform):
@@ -44,10 +45,10 @@ def _expand_platform(platform):
     """Expands a single platform into its compatible platforms.
 
     Returns:
-        A tuple `(platforms, linux_fallbacks)`. `linux_fallbacks` holds the
-        generic `linux_<arch>` platforms implied by a manylinux/musllinux
+        A tuple `(platforms, linux_platforms)`. `linux_platforms` holds the
+        native `linux_<arch>` platforms implied by a manylinux/musllinux
         platform. They are returned separately because packaging gives them
-        the lowest priority, after every manylinux and musllinux platform.
+        the highest priority, before every manylinux and musllinux platform.
     """
     if platform.startswith("macosx"):
         # Like pip, any "macosx*" prefix is accepted and kept, e.g.
@@ -79,7 +80,7 @@ def _expand_platform(platform):
                 result = []
                 for a in archs:
                     result.extend(manylinux_platforms((major, minor), a))
-                return result, _linux_fallbacks(archs)
+                return result, _native_linux_platforms(archs)
     elif platform.startswith("manylinux"):
         parts = platform.split("_", 1)
         if len(parts) == 2:
@@ -96,7 +97,7 @@ def _expand_platform(platform):
                 result = []
                 for a in archs:
                     result.extend(manylinux_platforms(version, a))
-                return result, _linux_fallbacks(archs)
+                return result, _native_linux_platforms(archs)
     elif platform.startswith("musllinux_"):
         parts = platform.split("_")
         if len(parts) >= 4:
@@ -109,7 +110,7 @@ def _expand_platform(platform):
                 result = []
                 for a in archs:
                     result.extend(musllinux_platforms((major, minor), a))
-                return result, _linux_fallbacks(archs)
+                return result, _native_linux_platforms(archs)
     elif platform.startswith("android_"):
         # Equivalent to pip's re.fullmatch(r"android_(\d+)_(.+)", platform).
         parts = platform.split("_", 2)
@@ -124,26 +125,33 @@ def _expand_allowed_platforms(platforms):
 
     seen = {}
     result = []
-    deferred = []
+    linux = []
+    linux_index = None
 
     for p in platforms:
         if p in seen:
             continue
-        additions, linux_fallbacks = _expand_platform(p)
+        additions, linux_platforms = _expand_platform(p)
+        if linux_platforms and linux_index == None:
+            linux_index = len(result)
+        linux.extend(linux_platforms)
         for add in additions:
             if add not in seen:
                 seen[add] = True
                 result.append(add)
-        deferred.extend(linux_fallbacks)
 
-    # Like packaging's `_linux_platforms()`, the generic `linux_<arch>`
-    # platforms come after all manylinux/musllinux platforms.
-    for add in deferred:
+    if linux_index == None:
+        return result
+
+    # Like packaging's `_linux_platforms()`, the native `linux_<arch>`
+    # platforms come before all manylinux/musllinux platforms.
+    native_platforms = []
+    for add in linux:
         if add not in seen:
             seen[add] = True
-            result.append(add)
+            native_platforms.append(add)
 
-    return result
+    return result[:linux_index] + native_platforms + result[linux_index:]
 
 def get_supported(version = None, platforms = None, impl = None, abis = None):
     """Return a list of supported tags, most preferred first.
@@ -163,18 +171,19 @@ def get_supported(version = None, platforms = None, impl = None, abis = None):
 
     * `manylinux_X_Y_<arch>`, legacy `manylinux1/2010/2014_<arch>` and
       `musllinux_X_Y_<arch>` are fully expanded, as packaging does for the host
-      platform in `_linux_platforms()`: every older glibc/musl version, the
-      legacy aliases, an `armv8l` -> `armv7l` fallback, and finally
-      `linux_<arch>` (after all other expanded platforms). pip only maps
-      `manylinux2014` -> `manylinux2010`/`manylinux1` and `manylinux2010` ->
-      `manylinux1`. As in packaging, nothing older than glibc 2.17 is emitted
-      on architectures other than x86_64/i686, so `manylinux2010_aarch64`
-      expands to just `linux_aarch64`.
+      platform in `_linux_platforms()`: the native `linux_<arch>` first
+      (before all of the manylinux/musllinux platforms), then every older
+      glibc/musl version with the legacy aliases, and an `armv8l` -> `armv7l`
+      fallback. pip only maps `manylinux2014` -> `manylinux2010`/`manylinux1`
+      and `manylinux2010` -> `manylinux1`. As in packaging, nothing older than
+      glibc 2.17 is emitted on architectures other than x86_64/i686, so
+      `manylinux2010_aarch64` expands to just `linux_aarch64`.
     * `platforms=None`, `[]`, or platforms that all expand to nothing (e.g.
       `macosx_9_0_x86_64`) mean `["any"]`, and `abis=None` means no
       interpreter-specific ABIs; pip uses the host's platforms and ABIs.
       `version` is required and `impl` defaults to `"cp"`.
-    * Every `"abi3"` and `"none"` entry in `abis` is ignored for CPython;
+    * Every `"abi3"` and `"none"` entry in `abis` is ignored for CPython, and
+      so is every `"abi3t"` entry if the first ABI is a free-threaded one;
       packaging only removes the first occurrence of each.
 
     Tags are lowercase, like packaging's `Tag`.
@@ -233,36 +242,59 @@ def _make_tag(interpreter, abi, platform):
         platform = platform.lower(),
     )
 
-def parse_tag(tag, validate_order = False):
-    """Parses the provided tag into a list of Tag structs.
+_DIGITS = "0123456789"
+_IDENTIFIER_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_" + _DIGITS
 
-    A compressed tag set such as `py2.py3-none-any` expands to one Tag per
-    combination. packaging returns a `frozenset`; this returns a list without
-    duplicates, in the order the components appear in the tag. Tag structs
-    have `interpreter`, `abi` and `platform` fields, are lowercased like
-    packaging's `Tag`, and compare equal by value.
+def _is_identifier(s):
+    """Equivalent to Python's `str.isidentifier()` for ASCII strings.
 
-    Like packaging, empty components (e.g. `py3--any`) are not rejected; they
-    produce tags with empty fields that never match a supported tag.
+    Starlark can't tell the Unicode letters from the other characters, so
+    every non-ASCII character is accepted.
+    """
+    if not s or s[0] in _DIGITS:
+        return False
 
-    Args:
-        tag: The tag to parse (e.g., "py3-none-any").
-        validate_order: Whether to check if compressed tag set components are in sorted order.
+    # Fast path: there are only ASCII letters, digits and underscores.
+    rest = s.lstrip(_IDENTIFIER_CHARS)
+    if not rest:
+        return True
+
+    # buildifier: disable=string-iteration
+    for c in rest.elems():
+        if c not in _IDENTIFIER_CHARS and c < "\200":
+            return False
+    return True
+
+def _try_parse_tag(tag, validate_order = False, limit = None):
+    """Like `parse_tag`, but returns the error instead of failing.
 
     Returns:
-        A list of Tag structs.
+        `(tags, error kind, error message)`. For a valid tag the error kind
+        and the message are None, otherwise the tags are None and the kind is
+        the snake case name of the exception that packaging raises:
+        "invalid_tag", "unsorted_tags" or "too_many_tags".
     """
-    components = tag.split("-")
-    if len(components) != 3:
-        fail("Invalid tag: {}".format(tag))
+    component_parts = [component.split(".") for component in tag.split("-")]
+    for parts in component_parts:
+        if "" in parts:
+            return None, "invalid_tag", "Tag {} has an empty component: {}".format(repr(tag), repr(".".join(parts)))
+        if validate_order and parts != sorted(parts):
+            return None, "unsorted_tags", "Tag component {} is not in sorted order per PEP 425".format(repr(".".join(parts)))
 
-    component_parts = [component.split(".") for component in components]
-    if validate_order:
+    if limit != None:
+        tag_count = 1
         for parts in component_parts:
-            if parts != sorted(parts):
-                fail("Tag component {} is not in sorted order per PEP 425".format(".".join(parts)))
+            tag_count *= len(parts)
+        if tag_count > limit:
+            return None, "too_many_tags", "Compressed tag set would generate {} tags, exceeding limit {}".format(tag_count, limit)
+
+    if len(component_parts) != 3:
+        return None, "invalid_tag", "Tag {} must have exactly three components".format(repr(tag))
 
     interpreters, abis, platforms = component_parts
+    for interpreter in interpreters:
+        if not _is_identifier(interpreter):
+            return None, "invalid_tag", "Tag {} has an invalid interpreter: {}".format(repr(tag), repr(interpreter))
 
     seen = {}
     result = []
@@ -275,6 +307,40 @@ def parse_tag(tag, validate_order = False):
                     seen[key] = True
                     result.append(t)
 
+    return result, None, None
+
+def parse_tag(tag, validate_order = False, limit = None):
+    """Parses the provided tag into a list of Tag structs.
+
+    A compressed tag set such as `py2.py3-none-any` expands to one Tag per
+    combination. packaging returns a `frozenset`; this returns a list without
+    duplicates, in the order the components appear in the tag. Tag structs
+    have `interpreter`, `abi` and `platform` fields, are lowercased like
+    packaging's `Tag`, and compare equal by value.
+
+    Like packaging, this fails if the tag does not have exactly three
+    components, if a component or a member of a compressed tag set is empty
+    (e.g. `py3--any` or `py3.-none-any`), or if an interpreter is not an
+    identifier (e.g. `2.7.6-none-any`). Any non-ASCII character is accepted
+    in the interpreter, where packaging only accepts the Unicode letters and
+    digits.
+
+    Args:
+        tag: The tag to parse (e.g., "py3-none-any").
+        validate_order: Whether to check if compressed tag set components are in sorted order.
+        limit: The maximum number of tags that a compressed tag set may
+            generate, or None for no limit. Parsing fails if there would be
+            more of them, before any of the tags is created.
+
+    Returns:
+        A list of Tag structs.
+    """
+    if limit != None and limit < 0:
+        fail("limit must be non-negative")
+
+    result, _, error = _try_parse_tag(tag, validate_order, limit)
+    if error:
+        fail(error)
     return result
 
 def _tag_key(tag):
@@ -355,4 +421,5 @@ tags = struct(
 
 tags_internal = struct(
     expand_allowed_platforms = _expand_allowed_platforms,
+    try_parse_tag = _try_parse_tag,
 )

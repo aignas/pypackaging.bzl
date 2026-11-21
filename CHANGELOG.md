@@ -8,10 +8,65 @@ While the version is 0.x, breaking changes are released as minor versions.
 
 ## [Unreleased]
 
+Aligns the library with `packaging` 26.3.
+
+### Breaking changes
+
+These follow the behaviour changes of `packaging` 26.3:
+
+- `tags.get_supported` puts the native `linux_<arch>` tags before the
+  `manylinux` and `musllinux` tags, they used to be after them. A wheel that
+  is built for `linux_x86_64` is now preferred over a `manylinux` wheel by
+  `tags.select_compatible`.
+- `tags.get_supported` uses the `fat3` macOS binary format, `fat32` was a typo.
+- `tags.get_supported` checks if the first ABI is a free-threaded one before
+  it removes `abi3` and `none`, so `abis = ["abi3", "cp313t"]` no longer yields
+  the `abi3t` tags, and an explicit `abi3t` no longer results in duplicate
+  tags.
+- `tags.parse_tag` fails for a tag with an empty component or an empty member
+  of a compressed tag set (e.g. `py3--any`), and for an interpreter that is not
+  an identifier (e.g. `2.7.6-none-any`).
+- `utils.parse_wheel_filename` fails for the same tags and for an empty
+  project name, and `utils.parse_sdist_filename` fails for an empty project
+  name.
+- `markers.parse` and `requirements.parse` fail if there is a trailing line
+  break. The trailing spaces and tabs are still accepted.
+- `markers.parse` normalizes the value that is tested for the membership in
+  `extras` or `dependency_groups` (e.g. `"Foo_Bar" in extras`), and it no
+  longer turns a variable that is compared with `extra` into a string (e.g.
+  `extra == os_name`).
+- `markers.to_string` uses single quotes for the values that have a double
+  quote, so that the result can be parsed back, and fails for the values that
+  have both of the quote characters.
+
 ### Added
 
 - WORKSPACE is supported again with Bazel 7 and 8: define the repository with
   the name `pypackaging.bzl`, see the README. `e2e/workspace` tests it.
+- `tags.parse_tag` has the `limit` argument, the maximum number of the tags
+  that a compressed tag set may generate.
+
+### Changed
+
+- The error messages follow `packaging` 26.3: `Invalid quoted string` for
+  malformed marker string literals, a specific message for a `.*` suffix
+  after a pre-release, post-release, dev or local version in a requirement,
+  and `Invalid requirement` for the requirements with an invalid specifier.
+- `utils.is_normalized_name` behaves the same as in `packaging` now, which no
+  longer accepts names like `a--b`.
+- The `~=` operator behaves the same as in `packaging` now, which gets the
+  prefix from the normalized version too (e.g. `~=1.0c1` and `~=v1.0`).
+- The version ranges that were added in `packaging` 26.3 (`packaging.ranges`,
+  `SpecifierSet.to_range`, `is_subset`, `is_superset` and `is_disjoint`) and
+  `tags.pure_python_tags` are not ported.
+
+### Internal
+
+- The tests include the cases that are generated from the test-suite of
+  `packaging`, with the expected values computed by `packaging` itself, see
+  `conformance/README.md`.
+- `perf/` has the tools to count the steps that the Starlark code executes and
+  to benchmark it with Bazel.
 
 ## [0.3.0] - 2026-10-16
 

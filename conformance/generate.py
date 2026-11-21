@@ -145,6 +145,37 @@ _EXTRA_INVALID_SPECIFIERS = [
     "~=1!1",
 ]
 
+# (version, specifier), the pre-releases are allowed.
+_EXTRA_SPECIFIER_CASES = [
+    # The prefix of the compatible release operator comes from the normalized
+    # version. `packaging` used to get it from the string before 26.3.
+    ("1.1", "~=1.0c1"),
+    ("2.0", "~=1.0c1"),
+    ("1.5", "~=1.0.c1"),
+    ("1.5", "~=1.0.pre1"),
+    ("1.5", "~=1.0.preview1"),
+    ("1.1", "~=1.0.r1"),
+    ("1.1", "~=1.0.rev1"),
+    ("1.1", "~=1.0.RC1"),
+    ("1.1", "~=1.0.POST1"),
+    ("1.1", "~=1.0.DEV1"),
+    ("1.1", "~=1.0.A1"),
+    ("1.0.5", "~=1.0.0c1"),
+    ("1.1", "~=1.0.0c1"),
+    ("1.1", "~=v1.0"),
+    ("2.0", "~=v1.0"),
+    ("1.1", "~=V1.0"),
+    ("2.2.5", "~=v2.2.0"),
+    ("1.5", "~=1.0RC1"),
+    ("1.5", "~=1.0-c1"),
+    ("1.5", "~=1.0_c1"),
+    ("1.5", "~=1.0alpha1"),
+    ("1.5", "~=1.0.post1"),
+    ("1.5", "~=1!1.0"),
+    ("1!1.5", "~=1!1.0"),
+    ("1!2.0", "~=1!1.0"),
+]
+
 # (specifier, version, prereleases, installed)
 _EXTRA_CONTAINS_CASES = [
     # The release of the version is shorter than the one of the specifier.
@@ -397,7 +428,10 @@ def version_cases(test_version, test_specifiers):
     specifiers = _TestModule(test_specifiers, VERSIONS=versions.namespace["VERSIONS"])
 
     specifier_cases = []
-    for version, spec, _ in specifiers.parametrize("TestSpecifier.test_specifiers"):
+    for version, spec in [
+        (version, spec)
+        for version, spec, _ in specifiers.parametrize("TestSpecifier.test_specifiers")
+    ] + _EXTRA_SPECIFIER_CASES:
         expected = Specifier(spec).contains(version, prereleases=True)
         specifier_cases.append((version, spec, expected))
 
