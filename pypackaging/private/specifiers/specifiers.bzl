@@ -192,8 +192,19 @@ def _equal(spec, sv, v):
         return get_public_key(v) == sv.key
     return v.key == sv.key
 
-def _matches_parsed(spec, v):
-    """Checks a parsed candidate version against a non-=== specifier."""
+def specifier_matches_parsed(spec, v):
+    """Checks a parsed candidate version against a non-=== specifier.
+
+    Internal helper (e.g. for markers.bzl); not part of the public API. Unlike
+    `specifier_contains` it does not validate the arguments.
+
+    Args:
+        spec: The specifier struct, the operator of which is not `===`.
+        v: The parsed candidate version.
+
+    Returns:
+        True if the version satisfies the specifier, False otherwise.
+    """
     operator = spec.operator
     sv = _spec_version(spec)
 
@@ -269,7 +280,7 @@ def _matches(spec, v, version_str):
         return version_str.lower() == spec.version.lower()
     if v == None:
         return False
-    return _matches_parsed(spec, v)
+    return specifier_matches_parsed(spec, v)
 
 def _coerce(candidate):
     """Returns (parsed version or None, candidate string or None)."""

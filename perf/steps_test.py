@@ -9,14 +9,14 @@ from workloads import workloads
 # numbers with the output of `bazel run //:benchmark`.
 _STEPS = {
     # keep sorted
-    "evaluate_long": 2175,
-    "evaluate_long_parsed": 780,
-    "evaluate_string": 127,
-    "evaluate_two_strings": 262,
-    "evaluate_version": 239,
-    "evaluate_version_parsed": 128,
-    "parse_long": 1396,
-    "requirement_parse": 401,
+    "evaluate_long": 2018,
+    "evaluate_long_parsed": 659,
+    "evaluate_string": 121,
+    "evaluate_two_strings": 250,
+    "evaluate_version": 211,
+    "evaluate_version_parsed": 120,
+    "parse_long": 1360,
+    "requirement_parse": 381,
     "specifier_set_contains": 66,
     "specifier_set_parse": 146,
     "tags_get_supported": 1227,
