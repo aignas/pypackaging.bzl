@@ -1,4 +1,5 @@
 bazel-*
+__pycache__/
 user.bazelrc
 .idea/
 .ijwb/
