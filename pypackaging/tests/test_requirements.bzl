@@ -113,7 +113,7 @@ _MARKERS = [
 
 _WHITESPACES = ["", " ", "\t"]
 
-# (input, expected message): packaging 26.2 error messages with "Invalid requirement: " prefix.
+# (input, expected message): packaging 26.3 error messages with "Invalid requirement: " prefix.
 _INVALID_REQUIREMENTS = [
     ("", "Invalid requirement: Expected package name at the start of dependency specifier\n    \n    ^"),
     (" ", "Invalid requirement: Expected package name at the start of dependency specifier\n     \n     ^"),
@@ -175,7 +175,15 @@ _INVALID_REQUIREMENTS = [
     ("foo>=1.0 rc1", "Invalid requirement: Expected comma (within version specifier), semicolon (after version specifier) or end\n    foo>=1.0 rc1\n       ~~~~~~^"),
     ("foo~=1.0.*", "Invalid requirement: .* suffix can only be used with `==` or `!=` operators\n    foo~=1.0.*\n       ~~~~~~^"),
     ("foo<=1..0", "Invalid requirement: Expected comma (within version specifier), semicolon (after version specifier) or end\n    foo<=1..0\n       ~~~^"),
-    ("foo===abc,def", "Invalid specifier: def"),
+    ("foo===abc,def", "Invalid requirement: Invalid specifier: \"def\""),
+    ("foo==1.2.3.post4.*", "Invalid requirement: .* suffix cannot be used with pre-release, post-release, dev or local versions\n    foo==1.2.3.post4.*\n       ~~~~~~~~~~~~~~^"),
+    ("foo == 1.2.3.post4.*", "Invalid requirement: .* suffix cannot be used with pre-release, post-release, dev or local versions\n    foo == 1.2.3.post4.*\n        ~~~~~~~~~~~~~~~^"),
+    ("foo!=1.0a1.*", "Invalid requirement: .* suffix cannot be used with pre-release, post-release, dev or local versions\n    foo!=1.0a1.*\n       ~~~~~~~~^"),
+    # A trailing line break.
+    ("foo\n", "Invalid requirement: Expected semicolon (after name with no version specifier) or end\n    foo\n\n       ^"),
+    ("foo>=1\n", "Invalid requirement: Expected comma (within version specifier), semicolon (after version specifier) or end\n    foo>=1\n\n       ~~~^"),
+    ("foo>=1\r\n", "Invalid requirement: Expected comma (within version specifier), semicolon (after version specifier) or end\n    foo>=1\r\n\n       ~~~^"),
+    ("foo; python_version >= \"3\"\n", "Invalid requirement: Expected end of dependency specifier\n    foo; python_version >= \"3\"\n\n                              ^"),
     ("foo\r", "Invalid requirement: Expected semicolon (after name with no version specifier) or end\n    foo\r\n       ^"),
     ("foo>=1.0,\n<2", "Invalid requirement: Expected comma (within version specifier), semicolon (after version specifier) or end\n    foo>=1.0,\n<2\n       ~~~~~~^"),
     ("foo\n>=1.0", "Invalid requirement: Expected semicolon (after name with no version specifier) or end\n    foo\n>=1.0\n       ^"),
@@ -196,7 +204,8 @@ _INVALID_REQUIREMENTS = [
     ("foo>=1.0; os_name=='nt' and", "Invalid requirement: Expected a marker variable or quoted string\n    foo>=1.0; os_name=='nt' and\n                               ^"),
     ("foo; os_name == 'nt'; x", "Invalid requirement: Expected end of dependency specifier\n    foo; os_name == 'nt'; x\n                        ^"),
     ("foo; os_name == 'nt' xx", "Invalid requirement: Expected end of dependency specifier\n    foo; os_name == 'nt' xx\n                         ^"),
-    ("foo; os_name == '\\'", "Invalid string literal (the closing quote is escaped)"),
+    ("foo; os_name == '\\'", "Invalid quoted string (the closing quote is escaped)"),
+    ("foo; os_name == \"C:\\\"", "Invalid requirement: Invalid quoted string (the closing quote is escaped)\n    foo; os_name == \"C:\\\"\n                    ~~~~~^"),
     ("foo; bogus == 'x'", "Invalid requirement: Expected a marker variable or quoted string\n    foo; bogus == 'x'\n         ^"),
     ("foo; os_name == '\303\251' and", "Invalid requirement: Expected a marker variable or quoted string\n    foo; os_name == '\303\251' and\n" + " " * 27 + "^"),
     # Caret position counts code points, not UTF-8 bytes.
@@ -331,8 +340,9 @@ def _test_parse_requirement_grammar_impl(env, _target):
         env.expect.where(req = s).that_str(requirements.parse(s).name).equals(name)
     env.expect.that_collection(requirements.parse("foo[a_]").extras).contains_exactly(["a-"])
 
-    # Whitespace: spaces/tabs anywhere between tokens, a single trailing newline.
-    for s in ["  foo  ", "\tfoo", "foo\n", "foo ==1 \n", "foo\t>=\t1.0"]:
+    # Whitespace: spaces/tabs anywhere between tokens. A trailing line break
+    # is rejected, see the invalid requirements.
+    for s in ["  foo  ", "\tfoo", "foo ==1 \t", "foo\t>=\t1.0"]:
         env.expect.where(req = s).that_str(requirements.parse(s).name).equals("foo")
 
     # URLs: everything up to whitespace, including ';' and '@'.
@@ -362,7 +372,7 @@ def _test_parse_requirement_grammar(name):
     analysis_test(name = name, target = name + "_subject", impl = _test_parse_requirement_grammar_impl)
 
 def _test_parse_requirement_specifier_tokens_impl(env, _target):
-    # Expected values are from packaging 26.2.
+    # Expected values are from packaging 26.3.
     cases = [
         ("foo>=1!2.0", [(">=", "1!2.0")]),
         ("foo==1.0.*", [("==", "1.0.*")]),
@@ -418,7 +428,7 @@ def _test_parse_requirement_marker_str_impl(env, _target):
     cases = [
         ("foo>=1;python_version<'3.8'", "python_version<'3.8'"),
         ("foo ; os_name == 'nt' and extra=='x'  ", "os_name == 'nt' and extra=='x'"),
-        ("foo @ https://x/a;b ;\t(os_name == 'nt')\n", "(os_name == 'nt')"),
+        ("foo @ https://x/a;b ;\t(os_name == 'nt') \t", "(os_name == 'nt')"),
         ("foo; extra == 'my@extra'", "extra == 'my@extra'"),
     ]
     for s, expected in cases:
@@ -429,7 +439,7 @@ def _test_parse_requirement_marker_str(name):
     analysis_test(name = name, target = name + "_subject", impl = _test_parse_requirement_marker_str_impl)
 
 def _test_requirement_to_string_impl(env, _target):
-    # Expected values are `str(packaging.requirements.Requirement(...))` (26.2).
+    # Expected values are `str(packaging.requirements.Requirement(...))` (26.3).
     cases = [
         ("packaging", "packaging"),
         ("Foo_Bar[B,a,b]>=1;extra=='X_y'", "Foo_Bar[B,a,b]>=1; extra == \"x-y\""),

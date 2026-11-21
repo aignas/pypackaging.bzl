@@ -1,4 +1,4 @@
-"""Conformance test cases generated from `packaging==26.2`.
+"""Conformance test cases generated from `packaging==26.3`.
 
 GENERATED FILE, DO NOT EDIT. Update with:
 
@@ -438,6 +438,31 @@ SPECIFIER_CASES = [
     ("2!1.0", "==1.*", False),
     ("1.0", "==2!1.*", False),
     ("2!1.0", "!=2!1.0", False),
+    ("1.1", "~=1.0c1", True),
+    ("2.0", "~=1.0c1", False),
+    ("1.5", "~=1.0.c1", True),
+    ("1.5", "~=1.0.pre1", True),
+    ("1.5", "~=1.0.preview1", True),
+    ("1.1", "~=1.0.r1", True),
+    ("1.1", "~=1.0.rev1", True),
+    ("1.1", "~=1.0.RC1", True),
+    ("1.1", "~=1.0.POST1", True),
+    ("1.1", "~=1.0.DEV1", True),
+    ("1.1", "~=1.0.A1", True),
+    ("1.0.5", "~=1.0.0c1", True),
+    ("1.1", "~=1.0.0c1", False),
+    ("1.1", "~=v1.0", True),
+    ("2.0", "~=v1.0", False),
+    ("1.1", "~=V1.0", True),
+    ("2.2.5", "~=v2.2.0", True),
+    ("1.5", "~=1.0RC1", True),
+    ("1.5", "~=1.0-c1", True),
+    ("1.5", "~=1.0_c1", True),
+    ("1.5", "~=1.0alpha1", True),
+    ("1.5", "~=1.0.post1", True),
+    ("1.5", "~=1!1.0", False),
+    ("1!1.5", "~=1!1.0", True),
+    ("1!2.0", "~=1!1.0", False),
 ]
 
 # Strings that are not valid specifiers.
@@ -469,6 +494,8 @@ INVALID_SPECIFIERS = [
     "~=1",
     "==1.0.dev1.*",
     "!=1.0.dev1.*",
+    "==1.2+İ",
+    "==1.2+İıſK",
     "",
     "==*",
     "==.*",

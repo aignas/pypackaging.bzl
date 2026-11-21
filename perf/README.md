@@ -92,17 +92,17 @@ The time is of Bazel 8.5.0 on a laptop, only the ratios are meaningful.
 
 | Workload                     | Steps | Bazel, µs |
 | ---------------------------- | ----: | --------: |
-| `evaluate_long`              |  2588 |     560.9 |
+| `evaluate_long`              |  2587 |     560.9 |
 | `evaluate_long_parsed`       |   817 |     151.1 |
-| `evaluate_string`            |   191 |      39.5 |
-| `evaluate_two_strings`       |   380 |      74.6 |
-| `evaluate_version`           |   292 |      67.9 |
+| `evaluate_string`            |   190 |      39.5 |
+| `evaluate_two_strings`       |   379 |      74.6 |
+| `evaluate_version`           |   291 |      67.9 |
 | `evaluate_version_parsed`    |   152 |      34.0 |
-| `parse_long`                 |  1772 |     351.9 |
-| `requirement_parse`          |   591 |      95.3 |
+| `parse_long`                 |  1771 |     351.9 |
+| `requirement_parse`          |   589 |      95.3 |
 | `specifier_set_contains`     |    64 |      24.1 |
 | `specifier_set_parse`        |   155 |      82.8 |
-| `tags_get_supported`         |  2602 |     680.3 |
+| `tags_get_supported`         |  2604 |     680.3 |
 | `version_is_compatible`      |    30 |       6.0 |
 | `version_is_eq_prefix`       |    24 |       5.2 |
 | `version_is_ge`              |    22 |       3.9 |
@@ -112,4 +112,4 @@ The time is of Bazel 8.5.0 on a laptop, only the ratios are meaningful.
 | `version_parse_invalid`      |    16 |       4.0 |
 | `version_parse_pre_release`  |   124 |      25.7 |
 | `version_parse_release`      |    35 |       7.5 |
-| `wheel_filename_parse`       |   197 |      41.2 |
+| `wheel_filename_parse`       |   213 |      41.2 |

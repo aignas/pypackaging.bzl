@@ -1,9 +1,10 @@
 """Utilities for packaging.
 
 Derived from pypa/packaging: packaging/utils.py (Apache 2.0 / BSD).
+Baseline: pypa/packaging 26.3
 """
 
-load("//pypackaging/private/tags:tags.bzl", "tags")
+load("//pypackaging/private/tags:tags.bzl", "tags_internal")
 load("//pypackaging/private/version:version.bzl", "try_parse_version", "version_to_string")
 
 visibility(["//", "//pypackaging/..."])
@@ -14,7 +15,7 @@ _DIGITS = "0123456789"
 _VALID_NORMALIZED_START = _LOWER + _DIGITS
 _VALID_NORMALIZED_CHAR = _VALID_NORMALIZED_START + "-"
 
-# ASCII characters not matched by packaging's r"[\w\d._]" (re.UNICODE): ASCII
+# ASCII characters not matched by packaging's r"[\w._]" (re.UNICODE): ASCII
 # control characters, space and punctuation other than "_" and ".".
 _INVALID_ASCII_WHEEL_NAME_CHARS = (
     "\000\001\002\003\004\005\006\007\010\011\012\013\014\015\016\017" +
@@ -73,9 +74,10 @@ def is_normalized_name(name):
     """Check if a name is already normalized.
 
     A normalized name is lowercase ASCII letters and digits separated by
-    single `-`. packaging 26.2's regex also accepts `--` after a
-    one-character first segment (`a--b`, `a--b-c`); this function doesn't,
-    since `canonicalize_name` never produces it.
+    single `-`, i.e. a valid name that `canonicalize_name` returns unchanged.
+    A name must start and end with a letter or a digit, which
+    `canonicalize_name` does not enforce: `-not-legal` is returned unchanged
+    by it, but it is not a normalized name.
 
     Args:
         name: The name to check.
@@ -148,9 +150,9 @@ def canonicalize_version(version_input, strip_trailing_zero = True):
     return version_to_string(v)
 
 def _is_valid_wheel_name(name):
-    # Equivalent to packaging's re.match(r"^[\w\d._]*$", name, re.UNICODE),
-    # except that every non-ASCII character is accepted: Starlark can't tell
-    # Unicode letters and digits from other characters.
+    # Equivalent to packaging's re.match(r"^[\w._]+\Z", name, re.UNICODE) for
+    # a non-empty name, except that every non-ASCII character is accepted:
+    # Starlark can't tell Unicode letters and digits from other characters.
 
     # buildifier: disable=string-iteration
     for c in name.elems():
@@ -175,6 +177,11 @@ def parse_wheel_filename(filename, validate_order = False):
     non-ASCII character is accepted, where packaging only accepts Unicode
     word characters.
 
+    Like packaging, this fails if the project name is empty, if the version
+    is not valid, if a component of the tags or a member of a compressed tag
+    set is empty, or if an interpreter is not an identifier (e.g.
+    `playlyfe-0.1.1-2.7.6-none-any.whl`).
+
     Args:
         filename: The filename to parse.
         validate_order: Whether to fail if compressed tag set components
@@ -194,8 +201,9 @@ def parse_wheel_filename(filename, validate_order = False):
     parts = filename.split("-", dashes - 2)
     name_part = parts[0]
 
-    # See PEP 427 for the rules on escaping the project name.
-    if "__" in name_part or not _is_valid_wheel_name(name_part):
+    # See PEP 427 for the rules on escaping the project name, which must not
+    # be empty.
+    if "__" in name_part or not name_part or not _is_valid_wheel_name(name_part):
         fail("Invalid project name: {}".format(repr(filename)))
 
     name = canonicalize_name(name_part)
@@ -224,13 +232,11 @@ def parse_wheel_filename(filename, validate_order = False):
     else:
         build = ()
 
-    tag_str = parts[-1]
-    if validate_order:
-        for component in tag_str.split("-"):
-            component_parts = component.split(".")
-            if component_parts != sorted(component_parts):
-                fail("Invalid wheel filename (compressed tag set components must be in sorted order per PEP 425): {}".format(repr(filename)))
-    parsed_tags = tags.parse_tag(tag_str)
+    parsed_tags, error, _ = tags_internal.try_parse_tag(parts[-1], validate_order)
+    if error == "unsorted_tags":
+        fail("Invalid wheel filename (compressed tag set components must be in sorted order per PEP 425): {}".format(repr(filename)))
+    elif error:
+        fail("Invalid wheel filename (invalid tag component): {}".format(repr(filename)))
 
     return struct(
         name = name,
@@ -248,6 +254,10 @@ def parse_sdist_filename(filename):
     * `version`: the Version struct. Its `version_str` field is the version
       text exactly as it appears in the filename. For the normalized form, use
       `version.to_string(version)`.
+
+    Like packaging, this fails if the extension is not `.tar.gz` or `.zip`, if
+    there is no `-` between the name and the version, if the project name is
+    empty, or if the version is not valid.
 
     Args:
         filename: The filename to parse.
@@ -270,6 +280,8 @@ def parse_sdist_filename(filename):
 
     name_part = file_stem[:idx]
     version_part = file_stem[idx + 1:]
+    if not name_part:
+        fail("Invalid sdist filename (empty project name): {}".format(repr(filename)))
 
     name = canonicalize_name(name_part)
     ver = try_parse_version(version_part)

@@ -14,7 +14,7 @@ pypackaging.markers.evaluate(<a href="#pypackaging.markers.evaluate-markers">mar
 
 Evaluates a parsed marker expression against an environment.
 
-Semantics follow `packaging.markers.Marker.evaluate` (packaging 26.2):
+Semantics follow `packaging.markers.Marker.evaluate` (packaging 26.3):
 
 - `python_version`, `python_full_version`, `implementation_version` and
   `platform_release` are compared as PEP 440 versions when `op + value` is a
@@ -68,11 +68,13 @@ pypackaging.markers.parse(<a href="#pypackaging.markers.parse-marker_str">marker
 Parses a PEP 508 marker string into an AST-like structure.
 
 The grammar, error conditions and value processing follow
-`packaging.markers.Marker` (packaging 26.2): quoted strings are decoded like
+`packaging.markers.Marker` (packaging 26.3): quoted strings are decoded like
 Python string literals (`\N{...}` escapes are not supported), dotted
 variable names are mapped to their underscore form, `python_implementation`
 is an alias for `platform_python_implementation`, and the value compared
-against `extra` is normalized (PEP 685) at every nesting level.
+against `extra` or tested for the membership in `extras` or
+`dependency_groups` is normalized (PEP 685 and PEP 735) at every nesting
+level. A trailing line break is not accepted.
 
 Unlike upstream, an empty or whitespace-only string is accepted and
 returns `[]`, which `evaluate` treats as always true.
@@ -109,9 +111,11 @@ pypackaging.markers.to_string(<a href="#pypackaging.markers.to_string-markers">m
 
 Serializes a parsed marker tree like upstream `str(Marker)`.
 
-Variables and `extra` values are emitted in their normalized form, string
-values are double-quoted, and redundant outer parentheses around a group
-are dropped.
+Variables and `extra` values are emitted in their normalized form and
+redundant outer parentheses around a group are dropped. String values are
+double-quoted, or single-quoted if they contain a double quote, so that
+the result parses back to the same marker; a value that contains both
+quote characters cannot be serialized and fails.
 
 
 **PARAMETERS**
@@ -139,7 +143,7 @@ pypackaging.requirements.parse(<a href="#pypackaging.requirements.parse-req_str"
 Parses a PEP 508 requirement (dependency specifier) string.
 
 Accepts and rejects exactly what `packaging.requirements.Requirement`
-(packaging 26.2) does, failing with an upstream-style message that shows
+(packaging 26.3) does, failing with an upstream-style message that shows
 the input and a caret at the error position.
 
 Differences from upstream's `Requirement` object:
@@ -478,18 +482,19 @@ host interpreter:
 
 * `manylinux_X_Y_<arch>`, legacy `manylinux1/2010/2014_<arch>` and
   `musllinux_X_Y_<arch>` are fully expanded, as packaging does for the host
-  platform in `_linux_platforms()`: every older glibc/musl version, the
-  legacy aliases, an `armv8l` -> `armv7l` fallback, and finally
-  `linux_<arch>` (after all other expanded platforms). pip only maps
-  `manylinux2014` -> `manylinux2010`/`manylinux1` and `manylinux2010` ->
-  `manylinux1`. As in packaging, nothing older than glibc 2.17 is emitted
-  on architectures other than x86_64/i686, so `manylinux2010_aarch64`
-  expands to just `linux_aarch64`.
+  platform in `_linux_platforms()`: the native `linux_<arch>` first
+  (before all of the manylinux/musllinux platforms), then every older
+  glibc/musl version with the legacy aliases, and an `armv8l` -> `armv7l`
+  fallback. pip only maps `manylinux2014` -> `manylinux2010`/`manylinux1`
+  and `manylinux2010` -> `manylinux1`. As in packaging, nothing older than
+  glibc 2.17 is emitted on architectures other than x86_64/i686, so
+  `manylinux2010_aarch64` expands to just `linux_aarch64`.
 * `platforms=None`, `[]`, or platforms that all expand to nothing (e.g.
   `macosx_9_0_x86_64`) mean `["any"]`, and `abis=None` means no
   interpreter-specific ABIs; pip uses the host's platforms and ABIs.
   `version` is required and `impl` defaults to `"cp"`.
-* Every `"abi3"` and `"none"` entry in `abis` is ignored for CPython;
+* Every `"abi3"` and `"none"` entry in `abis` is ignored for CPython, and
+  so is every `"abi3t"` entry if the first ABI is a free-threaded one;
   packaging only removes the first occurrence of each.
 
 Tags are lowercase, like packaging's `Tag`.
@@ -517,7 +522,7 @@ A list of compatibility tag strings.
 <pre>
 load("@pypackaging.bzl", "pypackaging")
 
-pypackaging.tags.parse_tag(<a href="#pypackaging.tags.parse_tag-tag">tag</a>, <a href="#pypackaging.tags.parse_tag-validate_order">validate_order</a>)
+pypackaging.tags.parse_tag(<a href="#pypackaging.tags.parse_tag-tag">tag</a>, <a href="#pypackaging.tags.parse_tag-validate_order">validate_order</a>, <a href="#pypackaging.tags.parse_tag-limit">limit</a>)
 </pre>
 
 Parses the provided tag into a list of Tag structs.
@@ -528,8 +533,12 @@ duplicates, in the order the components appear in the tag. Tag structs
 have `interpreter`, `abi` and `platform` fields, are lowercased like
 packaging's `Tag`, and compare equal by value.
 
-Like packaging, empty components (e.g. `py3--any`) are not rejected; they
-produce tags with empty fields that never match a supported tag.
+Like packaging, this fails if the tag does not have exactly three
+components, if a component or a member of a compressed tag set is empty
+(e.g. `py3--any` or `py3.-none-any`), or if an interpreter is not an
+identifier (e.g. `2.7.6-none-any`). Any non-ASCII character is accepted
+in the interpreter, where packaging only accepts the Unicode letters and
+digits.
 
 
 **PARAMETERS**
@@ -539,6 +548,7 @@ produce tags with empty fields that never match a supported tag.
 | :------------- | :------------- | :------------- |
 | <a id="pypackaging.tags.parse_tag-tag"></a>tag |  The tag to parse (e.g., "py3-none-any").   |  none |
 | <a id="pypackaging.tags.parse_tag-validate_order"></a>validate_order |  Whether to check if compressed tag set components are in sorted order.   |  `False` |
+| <a id="pypackaging.tags.parse_tag-limit"></a>limit |  The maximum number of tags that a compressed tag set may generate, or None for no limit. Parsing fails if there would be more of them, before any of the tags is created.   |  `None` |
 
 **RETURNS**
 
@@ -703,9 +713,10 @@ pypackaging.utils.is_normalized_name(<a href="#pypackaging.utils.is_normalized_n
 Check if a name is already normalized.
 
 A normalized name is lowercase ASCII letters and digits separated by
-single `-`. packaging 26.2's regex also accepts `--` after a
-one-character first segment (`a--b`, `a--b-c`); this function doesn't,
-since `canonicalize_name` never produces it.
+single `-`, i.e. a valid name that `canonicalize_name` returns unchanged.
+A name must start and end with a letter or a digit, which
+`canonicalize_name` does not enforce: `-not-legal` is returned unchanged
+by it, but it is not a normalized name.
 
 
 **PARAMETERS**
@@ -738,6 +749,10 @@ The returned struct has these fields:
 * `version`: the Version struct. Its `version_str` field is the version
   text exactly as it appears in the filename. For the normalized form, use
   `version.to_string(version)`.
+
+Like packaging, this fails if the extension is not `.tar.gz` or `.zip`, if
+there is no `-` between the name and the version, if the project name is
+empty, or if the version is not valid.
 
 
 **PARAMETERS**
@@ -777,6 +792,11 @@ The returned struct has these fields:
 Like packaging, the project name may contain non-ASCII characters. Any
 non-ASCII character is accepted, where packaging only accepts Unicode
 word characters.
+
+Like packaging, this fails if the project name is empty, if the version
+is not valid, if a component of the tags or a member of a compressed tag
+set is empty, or if an interpreter is not an identifier (e.g.
+`playlyfe-0.1.1-2.7.6-none-any.whl`).
 
 
 **PARAMETERS**

@@ -2,7 +2,7 @@
 
 Derived from pypa/packaging: packaging/markers.py, packaging/_parser.py and
 packaging/_tokenizer.py (Apache 2.0 / BSD).
-Baseline: pypa/packaging 26.2
+Baseline: pypa/packaging 26.3
 """
 
 load("//pypackaging/private/specifiers:specifiers.bzl", "specifier_contains", "try_parse_specifier")
@@ -98,10 +98,10 @@ def skip_ws(src, pos):
     return pos
 
 def at_end(src, pos):
-    """Returns True if the upstream END token (regex `$`) matches at `pos`.
+    """Returns True if the upstream END token (regex `\\Z`) matches at `pos`.
 
-    Like Python's `$` without MULTILINE, this matches at the end of the string
-    and also just before a single trailing newline.
+    This only matches at the very end of the string, so a trailing line break
+    is not accepted.
 
     Internal helper shared with requirements.bzl; not part of the public API.
 
@@ -112,8 +112,7 @@ def at_end(src, pos):
     Returns:
         True if at the end of the input.
     """
-    n = len(src)
-    return pos == n or (pos == n - 1 and src[pos] == "\n")
+    return pos == len(src)
 
 def syntax_error(ctx, message, span_start, span_end = None):
     """Fails with an upstream-style `ParserSyntaxError` message.
@@ -213,13 +212,13 @@ def _decode_python_str(ctx, start, end):
             break
         c = body[i]
         if c == "\n" or c == "\r" or c == "\000":
-            syntax_error(ctx, "Invalid string literal (unescaped newline or NUL character)", start, end + 1)
+            syntax_error(ctx, "Invalid quoted string (unescaped newline or NUL character)", start, end + 1)
         if c != "\\":
             out.append(c)
             i += 1
             continue
         if i + 1 >= n:
-            syntax_error(ctx, "Invalid string literal (the closing quote is escaped)", start, end + 1)
+            syntax_error(ctx, "Invalid quoted string (the closing quote is escaped)", start, end + 1)
         d = body[i + 1]
         if d in _SIMPLE_ESCAPES:
             out.append(_SIMPLE_ESCAPES[d])
@@ -242,16 +241,16 @@ def _decode_python_str(ctx, start, end):
             count = _HEX_ESCAPE_LEN[d]
             digits = body[i + 2:i + 2 + count]
             if len(digits) != count or digits.lstrip(_HEX_DIGITS):
-                syntax_error(ctx, "Invalid string literal (truncated \\{} escape)".format(d), start, end + 1)
+                syntax_error(ctx, "Invalid quoted string (truncated \\{} escape)".format(d), start, end + 1)
             cp = int(digits, 16)
             if cp > 0x10FFFF:
-                syntax_error(ctx, "Invalid string literal (illegal Unicode character)", start, end + 1)
+                syntax_error(ctx, "Invalid quoted string (illegal Unicode character)", start, end + 1)
             out.append(_utf8(cp))
             i += 2 + count
         elif d == "N":
-            syntax_error(ctx, "Invalid string literal (\\N{...} escapes are not supported)", start, end + 1)
+            syntax_error(ctx, "Invalid quoted string (\\N{...} escapes are not supported)", start, end + 1)
         elif d == "\000":
-            syntax_error(ctx, "Invalid string literal (NUL character)", start, end + 1)
+            syntax_error(ctx, "Invalid quoted string (NUL character)", start, end + 1)
         else:
             # Unknown escapes are kept verbatim, like Python.
             out.append("\\")
@@ -315,14 +314,16 @@ def _parse_marker_item(ctx, pos):
     rhs, pos = _parse_marker_var(ctx, pos)
     pos = skip_ws(src, pos)
 
-    # PEP 685: normalize the value compared against `extra` (upstream
-    # `_normalize_extras`). Upstream only does this for top-level items, so
-    # `(extra == 'Foo_Bar')` never matches there; we normalize at every
-    # nesting level.
+    # PEP 685 and PEP 735: normalize the value compared against `extra` and
+    # the value which is tested for the membership in `extras` or
+    # `dependency_groups` (upstream `_normalize_extras`), at every nesting
+    # level. A variable that is compared with another variable is left alone.
     if lhs.type == "variable" and lhs.value == "extra":
-        rhs = _string(utils.canonicalize_name(rhs.value))
-    elif rhs.type == "variable" and rhs.value == "extra":
-        lhs = _string(utils.canonicalize_name(lhs.value))
+        if rhs.type == "string":
+            rhs = _string(utils.canonicalize_name(rhs.value))
+    elif rhs.type == "variable" and lhs.type == "string":
+        if rhs.value == "extra" or rhs.value in _MARKERS_ALLOWING_SET:
+            lhs = _string(utils.canonicalize_name(lhs.value))
     return (lhs, op, rhs), pos
 
 def parse_marker_expression(ctx, pos):
@@ -389,11 +390,13 @@ def parse_marker(marker_str):
     """Parses a PEP 508 marker string into an AST-like structure.
 
     The grammar, error conditions and value processing follow
-    `packaging.markers.Marker` (packaging 26.2): quoted strings are decoded like
+    `packaging.markers.Marker` (packaging 26.3): quoted strings are decoded like
     Python string literals (`\\N{...}` escapes are not supported), dotted
     variable names are mapped to their underscore form, `python_implementation`
     is an alias for `platform_python_implementation`, and the value compared
-    against `extra` is normalized (PEP 685) at every nesting level.
+    against `extra` or tested for the membership in `extras` or
+    `dependency_groups` is normalized (PEP 685 and PEP 735) at every nesting
+    level. A trailing line break is not accepted.
 
     Unlike upstream, an empty or whitespace-only string is accepted and
     returns `[]`, which `evaluate` treats as always true.
@@ -424,9 +427,16 @@ def parse_marker(marker_str):
 # ---------------------------------------------------------------------------
 
 def _format_node(node):
-    if node.type == "string":
-        return "\"" + node.value + "\""
-    return node.value
+    if node.type != "string":
+        return node.value
+
+    # Upstream `Value.serialize`: the quote that the value does not have.
+    value = node.value
+    if "\"" not in value:
+        return "\"" + value + "\""
+    if "'" not in value:
+        return "'" + value + "'"
+    fail("Cannot serialize marker value containing both quote characters: {}".format(repr(value)))
 
 def _format_item(item):
     lhs, op, rhs = item
@@ -435,9 +445,11 @@ def _format_item(item):
 def marker_to_string(markers):
     """Serializes a parsed marker tree like upstream `str(Marker)`.
 
-    Variables and `extra` values are emitted in their normalized form, string
-    values are double-quoted, and redundant outer parentheses around a group
-    are dropped.
+    Variables and `extra` values are emitted in their normalized form and
+    redundant outer parentheses around a group are dropped. String values are
+    double-quoted, or single-quoted if they contain a double quote, so that
+    the result parses back to the same marker; a value that contains both
+    quote characters cannot be serialized and fails.
 
     Args:
         markers: A parsed marker tree (from `parse`).
@@ -546,10 +558,12 @@ def _eval_item(item, environment):
         ))
 
     if type(lhs_val) != "string":
-        fail("Cannot evaluate marker `{}`: the left-hand side must be a string, but '{}' is a {}".format(
+        # Upstream `UndefinedComparison`.
+        fail("Cannot evaluate marker `{}`: the left-hand side must be a string, but '{}' is a {}; a set-valued marker can only be used with the membership form (e.g. \"<name>\" in {})".format(
             _format_item(item),
             key,
             type(lhs_val),
+            key,
         ))
     if type(rhs_val) != "string" and type(rhs_val) not in _COLLECTION_TYPES:
         fail("Marker environment value for '{}' must be a string or a collection of strings, got {} (in marker `{}`)".format(
@@ -618,7 +632,7 @@ def _prepare_environment(environment):
 def evaluate_markers(markers, environment):
     """Evaluates a parsed marker expression against an environment.
 
-    Semantics follow `packaging.markers.Marker.evaluate` (packaging 26.2):
+    Semantics follow `packaging.markers.Marker.evaluate` (packaging 26.3):
 
     - `python_version`, `python_full_version`, `implementation_version` and
       `platform_release` are compared as PEP 440 versions when `op + value` is a
