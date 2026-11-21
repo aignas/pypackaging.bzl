@@ -24,9 +24,11 @@ bzl_library(
 
 package_metadata(
     name = "package_metadata",
+    # The module name and version are not known when the repository is
+    # defined in a WORKSPACE file.
     purl = "pkg:bazel/{}@{}".format(
         module_name(),
         module_version(),
-    ),
+    ) if module_name() else "pkg:bazel/pypackaging.bzl",
     visibility = ["//visibility:public"],
 )
