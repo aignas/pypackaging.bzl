@@ -22,7 +22,8 @@ jobs:
       fail-fast: false
       matrix:
         # "pinned" uses the version in .bazelversion (also pinned in docs/,
-        # e2e/smoke/ and e2e/workspace/). The other legs override it with USE_BAZEL_VERSION.
+        # e2e/smoke/, e2e/workspace/ and perf/). The other legs override it
+        # with USE_BAZEL_VERSION.
         # 7.1.0 is the oldest supported version (bazel_compatibility).
         os: [ubuntu-latest]
         bazel: [pinned, 7.1.0, 7.x, 9.x]
@@ -72,6 +73,11 @@ jobs:
         if: runner.os == 'Linux'
         run: bazel test $LOCKFILE_FLAGS //...
         working-directory: docs
+      - name: Run Perf Tests
+        # The number of the steps does not depend on the Bazel version.
+        if: runner.os == 'Linux' && matrix.bazel == 'pinned'
+        run: bazel test $LOCKFILE_FLAGS //...
+        working-directory: perf
       - name: Run E2E Tests
         run: bazel test $LOCKFILE_FLAGS //...
         working-directory: e2e/smoke
