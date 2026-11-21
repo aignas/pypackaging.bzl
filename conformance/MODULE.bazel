@@ -1,0 +1,21 @@
+"""Bazel module for the conformance test cases, see the README.md."""
+
+bazel_dep(name = "pypackaging.bzl", version = "0.0.0")
+bazel_dep(name = "rules_python", version = "2.5.1")
+
+local_path_override(
+    module_name = "pypackaging.bzl",
+    path = "..",
+)
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# The reference implementation. The sdist is used, because the wheel does not
+# have the tests, which the test inputs are harvested from.
+http_archive(
+    name = "pypa_packaging",
+    build_file = "//:packaging.BUILD.bazel",
+    sha256 = "ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661",
+    strip_prefix = "packaging-26.2",
+    url = "https://files.pythonhosted.org/packages/d7/f1/e7a6dd94a8d4a5626c03e4e99c87f241ba9e350cd9e6d75123f992427270/packaging-26.2.tar.gz",
+)

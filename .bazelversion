@@ -2,8 +2,8 @@
 # The first line of this file is used by Bazelisk and Bazel to be sure
 # the right version of Bazel is used to build and test this repo.
 # This also defines which version is used on CI.
-# Keep the .bazelversion files in docs/, e2e/smoke/, e2e/workspace/ and perf/
-# in sync with this file.
+# Keep the .bazelversion files in conformance/, docs/, e2e/smoke/,
+# e2e/workspace/ and perf/ in sync with this file.
 #
 # Note that you should also run integration_tests against other Bazel
 # versions you support.
